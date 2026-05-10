@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Finances",
+  "version": "0.1.0",
+  "identifier": "com.jai.finances",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' https://cdn.plaid.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.plaid.com https://*.plaid.com; font-src 'self' data: https://cdn.plaid.com; frame-src https://cdn.plaid.com; child-src https://cdn.plaid.com; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8123 http://localhost:8123 https://production.plaid.com https://sandbox.plaid.com https://development.plaid.com",
+      "devCsp": "default-src 'self' http://localhost:5173; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173 https://cdn.plaid.com; style-src 'self' 'unsafe-inline' http://localhost:5173; img-src 'self' data: blob: http://localhost:5173 https://cdn.plaid.com https://*.plaid.com; font-src 'self' data: http://localhost:5173 https://cdn.plaid.com; frame-src https://cdn.plaid.com; child-src https://cdn.plaid.com; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:8123 http://localhost:8123 http://localhost:5173 ws://localhost:5173 https://production.plaid.com https://sandbox.plaid.com https://development.plaid.com"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "Finances",
+        "width": 1200,
+        "height": 800
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "app",
+    "resources": {
+      "resources/backend": "backend",
+      "resources/plaid.env": "plaid.env",
+      "resources/up.env": "up.env",
+      "resources/local_ai.env": "local_ai.env"
+    },
+    "icon": ["icons/icon.icns", "icons/icon.png"]
+  }
+}
