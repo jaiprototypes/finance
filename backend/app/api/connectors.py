@@ -1,11 +1,7 @@
-from fastapi import APIRouter
+"""Compatibility shim for the feature-owned router module."""
 
-from ..services.connectors import StubConnector, PlaidConnector, UpConnector
+from importlib import import_module
+import sys
 
-router = APIRouter(prefix="/connectors", tags=["connectors"])
-
-
-@router.get("")
-def list_connectors():
-    connectors = [StubConnector(), PlaidConnector(), UpConnector()]
-    return [{"name": connector.name, "enabled": connector.is_enabled()} for connector in connectors]
+_module = import_module("backend.app.features.connectors.connectors_router")
+sys.modules[__name__] = _module

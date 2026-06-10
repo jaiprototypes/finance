@@ -6,7 +6,8 @@ import argparse
 from sqlalchemy import select
 
 from backend.app.db import init_db, session_scope
-from backend.app.models import ArchivedInvoice, Client, Invoice, Project
+from backend.app.features.receivables.models import ArchivedInvoice, Client, Invoice
+from backend.app.features.timesheets.models import Project
 
 
 def parse_args() -> argparse.Namespace:

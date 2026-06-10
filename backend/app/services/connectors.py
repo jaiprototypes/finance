@@ -1,51 +1,7 @@
-from dataclasses import dataclass
+"""Compatibility shim for the feature-owned service module."""
 
+from importlib import import_module
+import sys
 
-@dataclass
-class ConnectorResult:
-    name: str
-    transactions: list[dict]
-
-
-class Connector:
-    name = "base"
-
-    def is_enabled(self) -> bool:
-        return False
-
-    def fetch_transactions(self) -> ConnectorResult:
-        return ConnectorResult(name=self.name, transactions=[])
-
-
-class StubConnector(Connector):
-    name = "stub"
-
-    def is_enabled(self) -> bool:
-        return False
-
-    def fetch_transactions(self) -> ConnectorResult:
-        return ConnectorResult(name=self.name, transactions=[])
-
-
-class PlaidConnector(Connector):
-    name = "plaid"
-
-    def is_enabled(self) -> bool:
-        try:
-            from .plaid_client import is_configured
-
-            return is_configured()
-        except Exception:
-            return False
-
-
-class UpConnector(Connector):
-    name = "up"
-
-    def is_enabled(self) -> bool:
-        try:
-            from .up_client import is_configured
-
-            return is_configured()
-        except Exception:
-            return False
+_module = import_module("backend.app.features.connectors.service")
+sys.modules[__name__] = _module

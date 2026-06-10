@@ -1,10 +1,7 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter
+"""Compatibility shim for the feature-owned router module."""
 
-router = APIRouter()
+from importlib import import_module
+import sys
 
-
-@router.get("/health")
-def health():
-    return {"status": "ok", "ts": datetime.now(tz=timezone.utc).isoformat()}
-
+_module = import_module("backend.app.features.diagnostics.health_router")
+sys.modules[__name__] = _module

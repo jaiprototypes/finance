@@ -4,31 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db, session_scope
-from .services.settings import validate_llm_configuration
 from .logging import setup_logging
-from .api import (
-    health_router,
-    accounts_router,
-    transactions_router,
-    categories_router,
-    budgets_router,
-    debts_router,
-    fx_router,
-    business_router,
-    timesheets_router,
-    imports_router,
-    settings_router,
-    diagnostics_router,
-    demo_router,
-    connectors_router,
-    reports_router,
-    classification_router,
-    assistant_router,
-    rules_router,
-    knowledge_router,
-    plaid_router,
-    up_router,
-)
+from .features.router import FEATURE_ROUTERS, STABLE_ROOT_ROUTERS
+from .features.settings.service import validate_llm_configuration
 
 TAURI_ALLOWED_ORIGINS = [
     "tauri://localhost",
@@ -57,24 +35,13 @@ app.add_middleware(
 )
 
 
-app.include_router(health_router)
-app.include_router(accounts_router)
-app.include_router(transactions_router)
-app.include_router(categories_router)
-app.include_router(budgets_router)
-app.include_router(debts_router)
-app.include_router(fx_router)
-app.include_router(business_router)
-app.include_router(timesheets_router)
-app.include_router(imports_router)
-app.include_router(settings_router)
-app.include_router(diagnostics_router)
-app.include_router(demo_router)
-app.include_router(connectors_router)
-app.include_router(reports_router)
-app.include_router(classification_router)
-app.include_router(assistant_router)
-app.include_router(rules_router)
-app.include_router(knowledge_router)
-app.include_router(plaid_router)
-app.include_router(up_router)
+for feature_router in FEATURE_ROUTERS:
+    app.include_router(feature_router, prefix="/api/v1")
+
+for stable_router in STABLE_ROOT_ROUTERS:
+    app.include_router(stable_router)
+
+# Temporary compatibility while scripts/tests migrate to /api/v1.
+for feature_router in FEATURE_ROUTERS:
+    if feature_router not in STABLE_ROOT_ROUTERS:
+        app.include_router(feature_router)

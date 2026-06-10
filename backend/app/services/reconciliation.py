@@ -1,10 +1,7 @@
-FINAL_RECONCILIATION_STATES = {"verified", "cleared"}
+"""Compatibility shim for the feature-owned service module."""
 
+from importlib import import_module
+import sys
 
-def feed_reconciliation_state(current_state: str | None, *, feed_pending: bool, has_split: bool) -> str:
-    normalized = (current_state or "imported").strip().lower()
-    if normalized in FINAL_RECONCILIATION_STATES:
-        return normalized
-    if has_split:
-        return "verified"
-    return "pending" if feed_pending else "imported"
+_module = import_module("backend.app.features.ledger.reconciliation")
+sys.modules[__name__] = _module

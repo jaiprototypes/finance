@@ -1,16 +1,7 @@
-from shared.debt import DebtSnapshot, payoff_plan
+"""Compatibility shim for the feature-owned service module."""
 
+from importlib import import_module
+import sys
 
-def build_payoff_plan(debts: list[dict], strategy: str, extra_payment: float) -> dict:
-    snapshots = [
-        DebtSnapshot(
-            debt_id=str(d["debt_id"]),
-            name=d["name"],
-            balance=float(d["balance"]),
-            apr=float(d["apr"]),
-            min_payment=float(d["min_payment"]),
-        )
-        for d in debts
-    ]
-    return payoff_plan(snapshots, strategy=strategy, extra_payment=extra_payment)
-
+_module = import_module("backend.app.features.debts.service")
+sys.modules[__name__] = _module

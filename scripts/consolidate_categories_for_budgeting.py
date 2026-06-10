@@ -11,16 +11,11 @@ from sqlalchemy import select, text
 
 from backend.app.config import BACKUP_DIR, DB_PATH
 from backend.app.db import session_scope
-from backend.app.models import (
-    BudgetCategoryTarget,
-    Category,
-    ClassificationAudit,
-    MerchantProfile,
-    Rule,
-    TransactionMemory,
-    TransactionSplit,
-)
-from backend.app.services.classification import ACTIVE_CATEGORY_NAMES, canonicalize_category_name
+from backend.app.features.budgeting.models import BudgetCategoryTarget
+from backend.app.features.classification.models import ClassificationAudit, MerchantProfile, Rule, TransactionMemory
+from backend.app.features.ledger.models import TransactionSplit
+from backend.app.features.taxonomy.service import ACTIVE_CATEGORY_NAMES, canonicalize_category_name
+from backend.app.features.taxonomy.models import Category
 
 
 def create_backup() -> Path:

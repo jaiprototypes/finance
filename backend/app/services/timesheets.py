@@ -1,16 +1,7 @@
-from datetime import datetime
+"""Compatibility shim for the feature-owned service module."""
 
-from shared.timesheets import compute_duration_minutes
+from importlib import import_module
+import sys
 
-
-def ensure_duration(entry: dict) -> int:
-    if entry.get("start_time") and entry.get("end_time"):
-        start = _parse_time(entry["start_time"])
-        end = _parse_time(entry["end_time"])
-        return compute_duration_minutes(start, end)
-    return int(entry["duration_minutes"])
-
-
-def _parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value)
-
+_module = import_module("backend.app.features.timesheets.service")
+sys.modules[__name__] = _module

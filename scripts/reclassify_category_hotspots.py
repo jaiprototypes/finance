@@ -10,8 +10,9 @@ from sqlalchemy import delete, or_, select, text
 
 from backend.app.config import BACKUP_DIR, DB_PATH
 from backend.app.db import init_db, session_scope
-from backend.app.models import ClassificationAudit, MerchantProfile, Transaction, TransactionMemory, TransactionSplit
-from backend.app.services.classification import apply_classification, build_transaction_payload, classify_payload
+from backend.app.features.classification.service import apply_classification, build_transaction_payload, classify_payload
+from backend.app.features.classification.models import ClassificationAudit, MerchantProfile, TransactionMemory
+from backend.app.features.ledger.models import Transaction, TransactionSplit
 
 
 ATM_DESCRIPTIONS = (

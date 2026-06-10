@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 
 from backend.app.db import init_db, session_scope
-from backend.app.services.archived_invoices import import_archived_invoice_file, parse_invoice_pdf
+from backend.app.features.receivables.archived_invoices import import_archived_invoice_file, parse_invoice_pdf
 
 
 def parse_args() -> argparse.Namespace:

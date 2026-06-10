@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 
 from backend.app.config import BACKUP_DIR, DB_PATH
 from backend.app.db import session_scope
-from backend.app.services.plaid_client import deduplicate_plaid_links
+from backend.app.features.connectors.plaid_client import deduplicate_plaid_links
 
 
 def create_backup() -> Path:

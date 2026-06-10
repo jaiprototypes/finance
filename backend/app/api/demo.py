@@ -1,22 +1,7 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+"""Compatibility shim for the feature-owned router module."""
 
-from ..db import get_session
-from ..services.demo import seed_demo_data, reset_demo_data
+from importlib import import_module
+import sys
 
-router = APIRouter(prefix="/demo", tags=["demo"])
-
-
-@router.post("/seed")
-def seed(session: Session = Depends(get_session)):
-    result = seed_demo_data(session)
-    session.commit()
-    return result
-
-
-@router.post("/reset")
-def reset(session: Session = Depends(get_session)):
-    result = reset_demo_data(session)
-    session.commit()
-    return result
-
+_module = import_module("backend.app.features.demo.router")
+sys.modules[__name__] = _module
