@@ -179,6 +179,21 @@ def test_classification_owns_rule_routes():
     assert "features.classification.rules_router" in legacy_rules
 
 
+def test_budgeting_owns_budget_projection_services():
+    budgeting_service = (ROOT / "backend" / "app" / "features" / "budgeting" / "service.py").read_text(
+        encoding="utf-8"
+    )
+    budgeting_reporting = ROOT / "backend" / "app" / "features" / "budgeting" / "reporting.py"
+    reports_service = (ROOT / "backend" / "app" / "features" / "reports" / "service.py").read_text(
+        encoding="utf-8"
+    )
+    assert budgeting_reporting.exists()
+    assert "..reports" not in budgeting_service
+    assert "def budget_status(" not in reports_service
+    assert "def budget_matrix(" not in reports_service
+    assert "from ..budgeting.reporting import" in reports_service
+
+
 def test_frontend_entry_and_api_client_are_decoupled():
     app_entry = ROOT / "apps" / "desktop" / "src" / "App.tsx"
     api_client = ROOT / "apps" / "desktop" / "src" / "shared" / "api" / "client.ts"

@@ -12,10 +12,11 @@ from ..ledger.models import Transaction
 from ..receivables.models import Client, Invoice
 from ..timesheets.models import Project, Task, TimeEntry
 from ..fx.currency import ensure_recent_fx_rates, get_recent_fortnightly_average_aud_per_usd
+from ..budgeting.service import budget_status
 from ..debts.service import build_payoff_plan
 from ..receivables.invoice_tracking import invoice_payment_summary, serialize_invoice
 from .local_ai import LocalAIUnavailableError, call_local_json, local_ai_status
-from ..reports.service import budget_status, expense_analysis, net_worth, timesheet_summary
+from ..reports.service import expense_analysis, net_worth, timesheet_summary
 
 
 def _refresh_fx_if_needed(session: Session) -> None:

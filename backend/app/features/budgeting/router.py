@@ -278,7 +278,7 @@ def delete_budget_bucket_target(target_id: int, session: Session = Depends(get_s
     if not target:
         raise HTTPException(status_code=404, detail="Budget bucket target not found")
     month = _require_budget_month(session, int(target.budget_month_id))
-    if _month_state(str(month.month)) == "past":
+    if month_state(str(month.month)) == "past":
         raise HTTPException(status_code=400, detail="Past months are locked and cannot be edited.")
     _validate_bucket_target_constraints(
         session,
