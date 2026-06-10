@@ -194,6 +194,35 @@ def test_budgeting_owns_budget_projection_services():
     assert "from ..budgeting.reporting import" in reports_service
 
 
+def test_fx_does_not_import_budgeting_feature():
+    offenders: list[str] = []
+    for path in (ROOT / "backend" / "app" / "features" / "fx").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "..budgeting" in text or "backend.app.features.budgeting" in text:
+            offenders.append(str(path.relative_to(ROOT)))
+    assert not offenders
+    budgeting_manifest = next(manifest for manifest in registry.manifests if manifest.key == "budgeting")
+    fx_manifest = next(manifest for manifest in registry.manifests if manifest.key == "fx")
+    assert "fx" in budgeting_manifest.dependencies
+    assert "budgeting" not in fx_manifest.dependencies
+
+
+def test_core_owns_base_currency_helpers():
+    core_currency = ROOT / "backend" / "app" / "core" / "currency.py"
+    assert core_currency.exists()
+    assert "DEFAULT_BASE_CURRENCY" in core_currency.read_text(encoding="utf-8")
+
+    guarded_paths = [
+        ROOT / "backend" / "app" / "features" / "budgeting" / "reporting.py",
+        ROOT / "backend" / "app" / "features" / "fx" / "currency.py",
+    ]
+    for path in guarded_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "..settings" not in text
+        assert "backend.app.features.settings" not in text
+        assert "...core.currency" in text
+
+
 def test_frontend_entry_and_api_client_are_decoupled():
     app_entry = ROOT / "apps" / "desktop" / "src" / "App.tsx"
     api_client = ROOT / "apps" / "desktop" / "src" / "shared" / "api" / "client.ts"

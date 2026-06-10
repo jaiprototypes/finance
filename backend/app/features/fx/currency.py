@@ -7,10 +7,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..budgeting.models import BudgetBucketTarget, BudgetCategoryTarget
+from ...core.currency import DEFAULT_BASE_CURRENCY
 from .models import FXRate
 from .service import ingest_rba_rates
-from ..settings.service import DEFAULT_BASE_CURRENCY
 
 logger = logging.getLogger(__name__)
 
@@ -176,23 +175,3 @@ def convert_amount(amount: float, source_currency: str | None, target_currency: 
     if source == "USD" and target == "AUD":
         return value * aud_per_usd
     raise ValueError(f"Unsupported FX conversion: {source} -> {target}")
-
-
-def rebase_budget_targets(
-    session: Session,
-    source_currency: str,
-    target_currency: str,
-    aud_per_usd: float | None,
-) -> int:
-    source = normalize_currency_code(source_currency)
-    target = normalize_currency_code(target_currency)
-    if source == target:
-        return 0
-    changed = 0
-    for model in (BudgetCategoryTarget, BudgetBucketTarget):
-        rows = session.execute(select(model)).scalars().all()
-        for row in rows:
-            row.amount = round(convert_amount(row.amount or 0.0, source, target, aud_per_usd), 2)
-            row.rollover_amount = round(convert_amount(row.rollover_amount or 0.0, source, target, aud_per_usd), 2)
-            changed += 1
-    return changed

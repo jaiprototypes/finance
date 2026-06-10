@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import text, select
 
+from ...core.currency import get_base_currency
 from ...core.ledger_filters import is_legacy_opening as _shared_is_legacy_opening
 from ..budgeting.reporting import BUDGET_CASH_TOLERANCE, budget_bucket_transactions, budget_matrix, budget_status
 from ..connectors.models import PlaidAccount, UpAccount
@@ -13,7 +14,6 @@ from ..timesheets.models import Project, TimeEntry
 from ..taxonomy.service import FRIENDS_CATEGORY_NAME
 from ..ledger.account_roles import account_cash_role, is_business_account
 from ..fx.currency import convert_amount, get_recent_fortnightly_average_aud_per_usd
-from ..settings.service import get_base_currency
 
 BUDGET_CASH_ACCOUNT_TYPES = {"bank", "checking"}
 

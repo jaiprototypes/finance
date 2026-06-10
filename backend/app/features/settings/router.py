@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 
 from ...db import get_session
 from .schemas import SettingsUpdate
+from ..budgeting.service import rebase_budget_targets
 from ..fx.currency import (
     ensure_recent_fx_rates,
     get_recent_fortnightly_average_aud_per_usd,
-    rebase_budget_targets,
 )
 from .service import (
     delete_setting,

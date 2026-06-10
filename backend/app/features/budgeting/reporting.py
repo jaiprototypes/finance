@@ -3,11 +3,11 @@ from typing import Any
 
 from sqlalchemy import select, text
 
+from ...core.currency import get_base_currency
 from ...core.ledger_filters import is_legacy_opening as _shared_is_legacy_opening
 from ..fx.currency import convert_amount, get_recent_fortnightly_average_aud_per_usd
 from ..ledger.account_roles import is_business_account
 from ..ledger.models import Account, Transaction, TransactionSplit
-from ..settings.service import get_base_currency
 from ..taxonomy.models import Category, Subcategory
 from ..taxonomy.service import (
     BUDGET_BUCKETS,

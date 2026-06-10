@@ -9,6 +9,12 @@ from ...config import (
     LOCAL_AI_MODEL,
     LOCAL_AI_TIMEOUT_SECONDS,
 )
+from ...core.currency import (
+    DEFAULT_BASE_CURRENCY,
+    SUPPORTED_BASE_CURRENCIES,
+    get_base_currency,
+    normalize_base_currency,
+)
 from .models import AppSetting
 
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
@@ -16,8 +22,6 @@ DEFAULT_CLASSIFICATION_MODEL = LOCAL_AI_MODEL
 DEFAULT_EMBEDDING_MODEL = "fts5-local"
 DEFAULT_LOCAL_AI_BASE_URL = LOCAL_AI_BASE_URL
 DEFAULT_LOCAL_AI_TIMEOUT_SECONDS = LOCAL_AI_TIMEOUT_SECONDS
-DEFAULT_BASE_CURRENCY = "USD"
-SUPPORTED_BASE_CURRENCIES = ("USD", "AUD")
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -69,25 +73,6 @@ def _is_loopback_url(value: str | None) -> bool:
         return False
     host = (parsed.hostname or "").strip().lower()
     return host in LOOPBACK_HOSTS
-
-
-def normalize_base_currency(value: str | None, default: str = DEFAULT_BASE_CURRENCY) -> str:
-    normalized = (value or "").strip().upper()
-    if not normalized:
-        return default
-    if normalized in SUPPORTED_BASE_CURRENCIES:
-        return normalized
-    return default
-
-
-def get_base_currency(session, default: str = DEFAULT_BASE_CURRENCY) -> str:
-    value = get_setting(session, "base_currency")
-    if value:
-        return normalize_base_currency(value, default)
-    legacy = get_setting(session, "budget_base_currency")
-    if legacy:
-        return normalize_base_currency(legacy, default)
-    return default
 
 
 def validate_llm_configuration(session) -> None:
