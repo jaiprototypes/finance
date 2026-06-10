@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { API_BASE, apiGet } from "../shared/api/client";
 import defaultLogo from "../assets/logo.png";
-import { PAGE_FOCUS_COPY, navBuckets, pages } from "./navigation";
+import { PAGE_FOCUS_COPY, defaultWorkspaceView, navBuckets, pages, renderFeaturePage } from "./featureRegistry";
 import {
   BusinessWorkspaceOverview,
   ControlWorkspaceOverview,
@@ -12,18 +12,6 @@ import {
   isPlaidOAuthRedirectLocation,
   toLogoSrc
 } from "../shared/financeUi";
-import { Accounts } from "../features/accounts/AccountsPage";
-import { Budgets } from "../features/budgets/BudgetsPage";
-import { Business } from "../features/business/BusinessPage";
-import { Dashboard } from "../features/dashboard/DashboardPage";
-import { Debts } from "../features/debts/DebtsPage";
-import { Diagnostics } from "../features/diagnostics/DiagnosticsPage";
-import { FXOptimizer } from "../features/fx/FXOptimizerPage";
-import { Imports } from "../features/imports/ImportsPage";
-import { Reports } from "../features/reports/ReportsPage";
-import { Settings } from "../features/settings/SettingsPage";
-import { Timesheets } from "../features/timesheets/TimesheetsPage";
-import { Transactions } from "../features/transactions/TransactionsPage";
 
 export default function AppShell() {
   if (isPlaidOAuthRedirectLocation()) {
@@ -31,13 +19,7 @@ export default function AppShell() {
   }
 
   const [activeWorkspace, setActiveWorkspace] = useState("home");
-  const [workspaceView, setWorkspaceView] = useState<Record<string, string>>({
-    home: "dashboard",
-    money: "transactions",
-    planning: "budgets",
-    business: "business",
-    control: "settings"
-  });
+  const [workspaceView, setWorkspaceView] = useState<Record<string, string>>(defaultWorkspaceView);
   const [accountFocus, setAccountFocus] = useState("");
   const [companyLogoPath, setCompanyLogoPath] = useState("");
   const [customLogoFailed, setCustomLogoFailed] = useState(false);
@@ -137,32 +119,17 @@ export default function AppShell() {
     return null;
   };
 
-  const renderPage = (pageId: string) => {
-    if (pageId === "dashboard") return <Dashboard />;
-    if (pageId === "accounts") {
-      return <Accounts onOpenRegister={openAccountRegister} onOpenReport={openAccountReport} />;
-    }
-    if (pageId === "transactions") {
-      return (
-        <Transactions
-          accountFocus={accountFocus}
-          onConsumeAccountFocus={() => setAccountFocus("")}
-        />
-      );
-    }
-    if (pageId === "budgets") return <Budgets />;
-    if (pageId === "debts") return <Debts />;
-    if (pageId === "business") {
-      return <Business companyLogoSrc={logoSrc} usingCustomLogo={usingCustomLogo} />;
-    }
-    if (pageId === "timesheets") return <Timesheets onInvoiceCreated={() => navigateToPage("business")} />;
-    if (pageId === "imports") return <Imports />;
-    if (pageId === "reports") return <Reports />;
-    if (pageId === "fx") return <FXOptimizer />;
-    if (pageId === "settings") return <Settings onLogoChange={setCompanyLogoPath} />;
-    if (pageId === "diagnostics") return <Diagnostics />;
-    return <Dashboard />;
-  };
+  const renderPage = (pageId: string) =>
+    renderFeaturePage(pageId, {
+      accountFocus,
+      companyLogoSrc: logoSrc,
+      onConsumeAccountFocus: () => setAccountFocus(""),
+      onInvoiceCreated: () => navigateToPage("business"),
+      onLogoChange: setCompanyLogoPath,
+      onOpenRegister: openAccountRegister,
+      onOpenReport: openAccountReport,
+      usingCustomLogo
+    });
 
   return (
     <div className="app">

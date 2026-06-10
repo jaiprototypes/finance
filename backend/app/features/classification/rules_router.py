@@ -3,8 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...db import get_session
-from ..classification.models import Rule
-from ..classification.schemas import RuleCreate, RuleOut
+from .models import Rule
+from .schemas import RuleCreate, RuleOut
 
 router = APIRouter(prefix="/rules", tags=["rules"])
 
@@ -57,3 +57,4 @@ def delete_rule(rule_id: int, session: Session = Depends(get_session)):
     session.delete(rule)
     session.commit()
     return {"status": "ok"}
+

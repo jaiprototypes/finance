@@ -3,5 +3,5 @@
 from importlib import import_module
 import sys
 
-_module = import_module("backend.app.features.taxonomy.rules_router")
+_module = import_module("backend.app.features.classification.rules_router")
 sys.modules[__name__] = _module
