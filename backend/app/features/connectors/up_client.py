@@ -10,10 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...config import UP_API_KEY
+from ...core.classification_port import classify_transaction_record, sync_full_amount_split
 from ..ledger.ingestion import LedgerIngestionService
 from .models import UpAccount, UpTransaction
 from ..ledger.models import Account, Transaction, TransactionSplit
-from ..classification.service import classify_transaction_record, sync_full_amount_split
 from ..ledger.reconciliation import feed_reconciliation_state
 
 logger = logging.getLogger(__name__)

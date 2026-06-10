@@ -6,8 +6,8 @@ from fpdf import FPDF
 from fpdf.enums import MethodReturnValue, XPos, YPos
 from sqlalchemy import select
 
+from ...core.settings import get_setting
 from .models import Client, Invoice, InvoiceLineItem
-from ..settings.service import get_setting
 
 logger = logging.getLogger(__name__)
 

@@ -3,25 +3,21 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
 from ...config import UPLOADS_DIR
+from ...core.classification_port import apply_classification, clean_merchant, normalize_merchant
+from ...core.events import emit_ledger_changed
+from ...core.ledger_filters import is_legacy_opening
 from ...db import get_session
-from ..classification.models import TransactionMemory, ClassificationAudit
 from ..debts.models import DebtPaymentLink
-from ..imports.models import ImportRow
 from .models import Account, Attachment, Transaction, TransactionSplit, TransactionTag
-from ..receivables.models import ArchivedInvoicePaymentLink, InvoicePaymentLink
 from ..taxonomy.models import Subcategory
 from .schemas import TransactionCreate, TransactionOut, TransactionSplitCreate, TransactionSplitUpdate, ReconcileUpdate, MergeTransactionsRequest, TransactionUpdate
-from ..receivables.service import ReceivableTrackingService
-from ..receivables.business_receivables import is_legacy_opening
-from ..classification.service import apply_classification, clean_merchant, normalize_merchant
 from ..taxonomy.subcategories import ensure_subcategory, subcategory_name, validate_subcategory_for_category
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
-receivable_tracking = ReceivableTrackingService()
 
 
 def _purge_transaction(session: Session, txn: Transaction) -> None:
@@ -35,11 +31,21 @@ def _purge_transaction(session: Session, txn: Transaction) -> None:
     session.execute(Attachment.__table__.delete().where(Attachment.transaction_id == txn.id))
     session.execute(TransactionSplit.__table__.delete().where(TransactionSplit.transaction_id == txn.id))
     session.execute(TransactionTag.__table__.delete().where(TransactionTag.transaction_id == txn.id))
-    session.execute(TransactionMemory.__table__.delete().where(TransactionMemory.transaction_id == txn.id))
-    session.execute(ClassificationAudit.__table__.delete().where(ClassificationAudit.transaction_id == txn.id))
-    session.execute(InvoicePaymentLink.__table__.delete().where(InvoicePaymentLink.transaction_id == txn.id))
     session.execute(
-        ArchivedInvoicePaymentLink.__table__.delete().where(ArchivedInvoicePaymentLink.transaction_id == txn.id)
+        text("DELETE FROM transaction_memory WHERE transaction_id = :transaction_id"),
+        {"transaction_id": txn.id},
+    )
+    session.execute(
+        text("DELETE FROM classification_audit WHERE transaction_id = :transaction_id"),
+        {"transaction_id": txn.id},
+    )
+    session.execute(
+        text("DELETE FROM invoice_payment_link WHERE transaction_id = :transaction_id"),
+        {"transaction_id": txn.id},
+    )
+    session.execute(
+        text("DELETE FROM archived_invoice_payment_link WHERE transaction_id = :transaction_id"),
+        {"transaction_id": txn.id},
     )
     session.execute(DebtPaymentLink.__table__.delete().where(DebtPaymentLink.transaction_id == txn.id))
     session.delete(txn)
@@ -103,23 +109,32 @@ def _apply_category_to_matching_merchants(
         if txn.reconciliation_state in ("pending", "imported"):
             txn.reconciliation_state = "verified"
         txn.updated_at = _now_str()
-        audit = ClassificationAudit(
-            transaction_id=txn.id,
-            source="merchant_update",
-            category_id=category_id,
-            classification=classification,
-            merchant_name=other_name or txn.payee or txn.description or merchant_name,
-            note=(
-                f"Applied to matching merchant"
-                + (
-                    f" · subcategory={subcategory_name(session, subcategory_id)}"
-                    if subcategory_id
-                    else ""
-                )
+        session.execute(
+            text(
+                """
+                INSERT INTO classification_audit
+                    (transaction_id, source, category_id, classification, merchant_name, note, created_at)
+                VALUES
+                    (:transaction_id, :source, :category_id, :classification, :merchant_name, :note, :created_at)
+                """
             ),
-            created_at=_now_str(),
+            {
+                "transaction_id": txn.id,
+                "source": "merchant_update",
+                "category_id": category_id,
+                "classification": classification,
+                "merchant_name": other_name or txn.payee or txn.description or merchant_name,
+                "note": (
+                    f"Applied to matching merchant"
+                    + (
+                        f" · subcategory={subcategory_name(session, subcategory_id)}"
+                        if subcategory_id
+                        else ""
+                    )
+                ),
+                "created_at": _now_str(),
+            },
         )
-        session.add(audit)
         updated += 1
     return updated
 
@@ -173,20 +188,26 @@ def list_transactions_details(include_system: bool = False, session: Session = D
     for txn in txns:
         txn["splits"] = split_map.get(txn["id"], [])
     audits = session.execute(
-        select(ClassificationAudit)
-        .where(ClassificationAudit.transaction_id.in_(txn_ids))
-        .order_by(ClassificationAudit.created_at.desc())
-    ).scalars().all()
-    audit_map: dict[int, ClassificationAudit] = {}
+        text(
+            """
+            SELECT transaction_id, source, note, created_at
+            FROM classification_audit
+            WHERE transaction_id IN :txn_ids
+            ORDER BY created_at DESC
+            """
+        ).bindparams(bindparam("txn_ids", expanding=True)),
+        {"txn_ids": list(txn_ids)},
+    ).mappings().all()
+    audit_map: dict[int, dict] = {}
     for audit in audits:
-        if audit.transaction_id not in audit_map:
-            audit_map[audit.transaction_id] = audit
+        if audit["transaction_id"] not in audit_map:
+            audit_map[int(audit["transaction_id"])] = dict(audit)
     for txn in txns:
         audit = audit_map.get(txn["id"])
         if audit:
-            txn["classification_source"] = audit.source
-            txn["classification_note"] = audit.note
-            txn["classification_at"] = audit.created_at
+            txn["classification_source"] = audit.get("source")
+            txn["classification_note"] = audit.get("note")
+            txn["classification_at"] = audit.get("created_at")
     return txns
 
 
@@ -208,7 +229,7 @@ def create_transaction(payload: TransactionCreate, session: Session = Depends(ge
     )
     session.add(txn)
     session.flush()
-    receivable_tracking.reconcile_after_ledger_change(session)
+    emit_ledger_changed(session)
     session.commit()
     session.refresh(txn)
     return txn
@@ -240,7 +261,7 @@ def update_transaction(transaction_id: int, payload: TransactionUpdate, session:
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(txn, field, value)
     txn.updated_at = _now_str()
-    receivable_tracking.reconcile_after_ledger_change(session)
+    emit_ledger_changed(session)
     session.commit()
     return {"status": "ok"}
 
@@ -251,7 +272,7 @@ def delete_transaction(transaction_id: int, session: Session = Depends(get_sessi
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
     _purge_transaction(session, txn)
-    receivable_tracking.reconcile_after_ledger_change(session)
+    emit_ledger_changed(session)
     session.commit()
     return {"status": "ok"}
 
@@ -524,14 +545,12 @@ def merge_transactions(payload: MergeTransactionsRequest, session: Session = Dep
         .values(transaction_id=primary.id)
     )
     session.execute(
-        TransactionMemory.__table__.update()
-        .where(TransactionMemory.transaction_id == duplicate.id)
-        .values(transaction_id=primary.id)
+        text("UPDATE transaction_memory SET transaction_id = :primary_id WHERE transaction_id = :duplicate_id"),
+        {"primary_id": primary.id, "duplicate_id": duplicate.id},
     )
     session.execute(
-        InvoicePaymentLink.__table__.update()
-        .where(InvoicePaymentLink.transaction_id == duplicate.id)
-        .values(transaction_id=primary.id)
+        text("UPDATE invoice_payment_link SET transaction_id = :primary_id WHERE transaction_id = :duplicate_id"),
+        {"primary_id": primary.id, "duplicate_id": duplicate.id},
     )
     session.execute(
         DebtPaymentLink.__table__.update()
@@ -539,9 +558,8 @@ def merge_transactions(payload: MergeTransactionsRequest, session: Session = Dep
         .values(transaction_id=primary.id)
     )
     session.execute(
-        ImportRow.__table__.update()
-        .where(ImportRow.transaction_id == duplicate.id)
-        .values(transaction_id=primary.id)
+        text("UPDATE import_row SET transaction_id = :primary_id WHERE transaction_id = :duplicate_id"),
+        {"primary_id": primary.id, "duplicate_id": duplicate.id},
     )
     session.delete(duplicate)
     session.commit()

@@ -4,12 +4,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ...db import get_session
 from .models import ArchivedInvoice, ArchivedInvoicePaymentLink, Client, Invoice, InvoiceLineItem, InvoicePaymentLink
-from ..timesheets.models import Project, TimeEntry
 from .schemas import ArchivedInvoiceDetailOut, ArchivedInvoiceOut, ArchivedInvoiceUpdate, ClientCreate, ClientOut, InvoiceCreate, InvoiceOut, InvoicePaymentApply, InvoiceSendRequest
 from .archived_invoices import (
     apply_archived_invoice_payment,
@@ -265,9 +264,8 @@ def delete_invoice(invoice_id: int, session: Session = Depends(get_session)):
     session.execute(InvoiceLineItem.__table__.delete().where(InvoiceLineItem.invoice_id == invoice_id))
     session.execute(InvoicePaymentLink.__table__.delete().where(InvoicePaymentLink.invoice_id == invoice_id))
     session.execute(
-        TimeEntry.__table__.update()
-        .where(TimeEntry.invoiced_invoice_id == invoice_id)
-        .values(invoiced_invoice_id=None)
+        text("UPDATE time_entry SET invoiced_invoice_id = NULL WHERE invoiced_invoice_id = :invoice_id"),
+        {"invoice_id": invoice_id},
     )
     session.delete(invoice)
     session.commit()
@@ -419,7 +417,10 @@ def _normalize_client_name(name: str) -> str:
 def _client_dependency_counts(session: Session, client_id: int) -> dict[str, int]:
     return {
         "projects": int(
-            session.execute(select(func.count()).select_from(Project).where(Project.client_id == client_id)).scalar()
+            session.execute(
+                text("SELECT COUNT(*) FROM project WHERE client_id = :client_id"),
+                {"client_id": client_id},
+            ).scalar()
             or 0
         ),
         "live_invoices": int(

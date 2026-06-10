@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from backend.app.models import Account, Base
@@ -46,6 +47,27 @@ def _python_files(root: Path):
     return root.rglob("*.py") if root.exists() else ()
 
 
+def _feature_import_edges() -> dict[str, set[str]]:
+    feature_root = ROOT / "backend" / "app" / "features"
+    edges: dict[str, set[str]] = {}
+    for path in feature_root.rglob("*.py"):
+        if path.name in {"manifest.py", "registry.py"}:
+            continue
+        origin = path.relative_to(feature_root).parts[0]
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            target = None
+            if node.level == 2 and node.module:
+                target = node.module.split(".")[0]
+            elif node.level == 0 and node.module and node.module.startswith("backend.app.features."):
+                target = node.module.split(".")[3]
+            if target and target != origin and (feature_root / target).is_dir():
+                edges.setdefault(origin, set()).add(target)
+    return edges
+
+
 def test_feature_packages_have_standard_entrypoints():
     feature_root = ROOT / "backend" / "app" / "features"
     for package in BACKEND_FEATURES:
@@ -63,6 +85,17 @@ def test_feature_registry_declares_backend_modules_and_routes():
     for manifest in registry.manifests:
         assert manifest.routes
         assert all(dependency in registry.keys for dependency in manifest.dependencies)
+
+
+def test_feature_import_graph_has_no_reciprocal_cycles():
+    edges = _feature_import_edges()
+    reciprocal_edges = sorted(
+        f"{origin} <-> {target}"
+        for origin, targets in edges.items()
+        for target in targets
+        if origin < target and origin in edges.get(target, set())
+    )
+    assert not reciprocal_edges
 
 
 def test_versioned_api_and_stable_readiness_routes_are_registered():

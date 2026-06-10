@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from ...core.classification_port import apply_classification, classify_payload
 from ...core.time import utc_now_iso
 from .models import Transaction
-from ..classification.service import apply_classification, classify_payload
 
 
 class LedgerIngestionService:
@@ -61,4 +61,3 @@ class LedgerIngestionService:
             return txn, result, None
         except Exception as exc:
             return txn, None, str(exc)
-

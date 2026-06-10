@@ -4,7 +4,7 @@ import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr
 
-from ..settings.service import get_setting
+from ...core.settings import get_setting
 
 
 def _as_bool(value: str | None, default: bool = False) -> bool:

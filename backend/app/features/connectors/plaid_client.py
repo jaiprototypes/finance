@@ -6,18 +6,17 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ...config import PLAID_CLIENT_ID, PLAID_ENV, PLAID_REDIRECT_URI, PLAID_SECRET
+from ...core.classification_port import classify_transaction_record, sync_full_amount_split
 from ..ledger.ingestion import LedgerIngestionService
-from ..classification.models import ClassificationAudit, TransactionMemory
 from .models import PlaidAccount, PlaidItem, PlaidTransaction
 from ..debts.models import DebtPaymentLink
 from ..imports.models import ImportRow
 from ..ledger.models import Account, Attachment, Transaction, TransactionSplit, TransactionTag
 from ..receivables.models import InvoicePaymentLink
-from ..classification.service import classify_transaction_record, sync_full_amount_split
 from ..ledger.reconciliation import feed_reconciliation_state
 
 logger = logging.getLogger(__name__)
@@ -328,11 +327,7 @@ def _can_collapse_duplicate_account(
 
 
 def _merge_duplicate_transaction_state(session: Session, primary_id: int, duplicate_id: int) -> None:
-    derived_tables = (
-        TransactionSplit,
-        TransactionMemory,
-        ClassificationAudit,
-    )
+    derived_tables = (TransactionSplit,)
     relational_tables = (
         Attachment,
         TransactionTag,
@@ -353,6 +348,24 @@ def _merge_duplicate_transaction_state(session: Session, primary_id: int, duplic
                 table.__table__.update()
                 .where(table.transaction_id == duplicate_id)
                 .values(transaction_id=primary_id)
+            )
+    for table_name in ("transaction_memory", "classification_audit"):
+        primary_count = session.execute(
+            text(f"SELECT COUNT(*) FROM {table_name} WHERE transaction_id = :primary_id"),
+            {"primary_id": primary_id},
+        ).scalar_one()
+        if primary_count:
+            session.execute(
+                text(f"DELETE FROM {table_name} WHERE transaction_id = :duplicate_id"),
+                {"duplicate_id": duplicate_id},
+            )
+        else:
+            session.execute(
+                text(
+                    f"UPDATE {table_name} SET transaction_id = :primary_id "
+                    "WHERE transaction_id = :duplicate_id"
+                ),
+                {"primary_id": primary_id, "duplicate_id": duplicate_id},
             )
     for table in relational_tables:
         session.execute(

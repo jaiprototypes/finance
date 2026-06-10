@@ -7,9 +7,9 @@ from typing import Optional
 from sqlalchemy import select, text, or_
 from sqlalchemy.exc import OperationalError
 
+from ...core.classification_port import register_classification_port
 from ...core.ledger_filters import is_legacy_opening as _shared_is_legacy_opening
 from .models import Rule, MerchantProfile, TransactionMemory, ClassificationAudit
-from ..connectors.models import PlaidTransaction, UpTransaction
 from ..ledger.models import Account, Transaction, TransactionSplit
 from ..taxonomy.models import Category
 from ..fx.currency import (
@@ -1242,20 +1242,34 @@ def build_transaction_payload(session, txn: Transaction) -> dict:
         "date": txn.date,
     }
     plaid = session.execute(
-        select(PlaidTransaction).where(PlaidTransaction.transaction_id == txn.id)
-    ).scalar_one_or_none()
+        text(
+            """
+            SELECT merchant_category_code, pfc_primary, pfc_detailed
+            FROM plaid_transaction
+            WHERE transaction_id = :transaction_id
+            """
+        ),
+        {"transaction_id": txn.id},
+    ).mappings().first()
     if plaid:
-        payload["mcc"] = plaid.merchant_category_code
-        payload["pfc_primary"] = plaid.pfc_primary
-        payload["pfc_detailed"] = plaid.pfc_detailed
+        payload["mcc"] = plaid.get("merchant_category_code")
+        payload["pfc_primary"] = plaid.get("pfc_primary")
+        payload["pfc_detailed"] = plaid.get("pfc_detailed")
     up = session.execute(
-        select(UpTransaction).where(UpTransaction.transaction_id == txn.id)
-    ).scalar_one_or_none()
+        text(
+            """
+            SELECT up_category_name, up_category_id
+            FROM up_transaction
+            WHERE transaction_id = :transaction_id
+            """
+        ),
+        {"transaction_id": txn.id},
+    ).mappings().first()
     if up:
-        if up.up_category_name:
-            payload["bank_category"] = up.up_category_name
-        elif up.up_category_id:
-            payload["bank_category"] = up.up_category_id
+        if up.get("up_category_name"):
+            payload["bank_category"] = up.get("up_category_name")
+        elif up.get("up_category_id"):
+            payload["bank_category"] = up.get("up_category_id")
     return payload
 
 
@@ -1886,3 +1900,13 @@ def _category_name(session, category_id: Optional[int]) -> Optional[str]:
         return None
     row = session.execute(select(Category).where(Category.id == category_id)).scalar_one_or_none()
     return row.name if row else None
+
+
+register_classification_port(
+    apply_classification_handler=apply_classification,
+    classify_payload_handler=classify_payload,
+    classify_transaction_record_handler=classify_transaction_record,
+    sync_full_amount_split_handler=sync_full_amount_split,
+    clean_merchant_handler=clean_merchant,
+    normalize_merchant_handler=normalize_merchant,
+)

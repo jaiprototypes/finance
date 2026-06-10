@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ...db import get_session
-from ..classification.models import MerchantProfile
-from ..ledger.models import TransactionSplit
 from .models import Category, Subcategory
 from .schemas import CategoryCreate, CategoryOut, SubcategoryCreate, SubcategoryOut
 from .subcategories import ensure_subcategory, normalize_subcategory_name
@@ -132,16 +130,27 @@ def delete_subcategory(subcategory_id: int, session: Session = Depends(get_sessi
     if not subcategory:
         raise HTTPException(status_code=404, detail="Subcategory not found")
 
-    split_count = session.query(TransactionSplit).filter(TransactionSplit.subcategory_id == subcategory_id).count()
-    profile_count = session.query(MerchantProfile).filter(MerchantProfile.default_subcategory_id == subcategory_id).count()
-
-    session.query(TransactionSplit).filter(TransactionSplit.subcategory_id == subcategory_id).update(
-        {TransactionSplit.subcategory_id: None},
-        synchronize_session=False,
+    split_count = int(
+        session.execute(
+            text("SELECT COUNT(*) FROM transaction_split WHERE subcategory_id = :subcategory_id"),
+            {"subcategory_id": subcategory_id},
+        ).scalar()
+        or 0
     )
-    session.query(MerchantProfile).filter(MerchantProfile.default_subcategory_id == subcategory_id).update(
-        {MerchantProfile.default_subcategory_id: None},
-        synchronize_session=False,
+    profile_count = int(
+        session.execute(
+            text("SELECT COUNT(*) FROM merchant_profile WHERE default_subcategory_id = :subcategory_id"),
+            {"subcategory_id": subcategory_id},
+        ).scalar()
+        or 0
+    )
+    session.execute(
+        text("UPDATE transaction_split SET subcategory_id = NULL WHERE subcategory_id = :subcategory_id"),
+        {"subcategory_id": subcategory_id},
+    )
+    session.execute(
+        text("UPDATE merchant_profile SET default_subcategory_id = NULL WHERE default_subcategory_id = :subcategory_id"),
+        {"subcategory_id": subcategory_id},
     )
     session.delete(subcategory)
     session.commit()
