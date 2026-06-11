@@ -363,6 +363,14 @@ def test_split_frontend_workspaces_delegate_to_feature_hooks():
         assert f"export function use{feature_name}Workspace" in hook.read_text(encoding="utf-8")
 
 
+def test_frontend_workspace_hooks_stay_bounded():
+    feature_root = ROOT / "apps" / "desktop" / "src" / "features"
+    for feature in HOOKED_FRONTEND_FEATURES:
+        feature_name = feature.title().replace(" ", "")
+        hook = feature_root / feature / "hooks" / f"use{feature_name}Workspace.tsx"
+        assert len(hook.read_text(encoding="utf-8").splitlines()) <= 900
+
+
 def test_largest_frontend_views_are_split_into_sections():
     feature_root = ROOT / "apps" / "desktop" / "src" / "features"
     for feature in SECTIONED_FRONTEND_FEATURES:

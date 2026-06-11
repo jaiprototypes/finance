@@ -1,48 +1,18 @@
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import type { MouseEvent } from "react";
 import { removeFeatureRecord, getFeatureData, sendFeatureCommand } from "../api";
 import {
   BoxTitle,
-  CollapsibleSection,
-  DEFAULT_LOCAL_AI_BASE_URL,
-  DEFAULT_LOCAL_AI_MODEL,
-  DEFAULT_LOCAL_AI_TIMEOUT_SECONDS,
-  EMPTY_INVOICE_PREVIEW_PROFILE,
-  InvoiceSheetPreview,
-  MATRIX_BREAKDOWN_COLORS,
-  PLAID_REFRESH_EVENT_KEY,
-  RowDisclosureButton,
   SectionHeader,
-  WorkspaceInsightCard,
-  buildConicGradient,
-  clearPendingPlaidLinkSession,
-  currentMonthLabel,
-  formatAmount,
   formatCompactCurrency,
   formatCount,
   formatCurrency,
-  formatDuration,
-  formatFileSize,
-  formatHours,
   formatMonthLabel,
   formatMonthYearLabel,
-  formatPlaidLinkExitError,
-  formatRemainingSummary,
-  formatSignedCurrency,
-  formatTimestampLabel,
-  isClosedReceivableStatus,
-  loadPlaidScript,
-  monthStateLabel,
-  normalizeLlmSettings,
-  notifyPlaidRefresh,
   renderMatrixMoney,
-  savePendingPlaidLinkSession,
-  toDateValue,
-  toDatetimeLocal,
-  toLogoSrc,
-  todayDate,
-  weekStartLabel
 } from "../../../shared/financeUi";
-import type { InvoicePreviewProfile, LlmSettings } from "../../../shared/financeUi";
+import { buildBudgetMatrixModel } from "./budgetMatrixModel";
+import { createBudgetSubcategoryRenderers } from "./budgetSubcategoryRenderers";
 
 export function useBudgetsWorkspace() {
   const [months, setMonths] = useState<any[]>([]);
@@ -142,34 +112,30 @@ export function useBudgetsWorkspace() {
     }));
   };
 
-  const monthMeta = budgetMatrix?.month_meta || {};
-  const currentBudgetMonth = budgetMatrix?.current_month || currentMonthLabel();
-  const getMonthState = (month: string) => String(monthMeta?.[month]?.state || monthStateLabel(month, currentBudgetMonth));
-  const isMonthEditable = (month: string) => getMonthState(month) !== "past";
-  const getRowActual = (row: any, month: string) =>
-    Number(row[row.type === "income" ? "income" : "expense"]?.[month] || 0);
-  const getCellInputValue = (row: any, month: string) => {
-    const raw = matrixEdits[String(row.id)]?.[month];
-    if (getMonthState(month) === "past") {
-      const actual = getRowActual(row, month);
-      return actual > 0 ? actual.toFixed(2) : "";
-    }
-    if (raw !== undefined) return raw;
-    const actual = getRowActual(row, month);
-    return actual > 0 ? actual.toFixed(2) : "";
-  };
-  const getEffectiveCellAmount = (row: any, month: string) => {
-    const actual = getRowActual(row, month);
-    if (getMonthState(month) === "past") {
-      return actual;
-    }
-    const raw = matrixEdits[String(row.id)]?.[month];
-    if (raw !== undefined && raw !== "") {
-      const amount = Number(raw);
-      if (Number.isFinite(amount)) return amount;
-    }
-    return actual;
-  };
+  const {
+    budgetCurrency,
+    balanceSummary,
+    currentBudgetMonth,
+    currentMonthChartGradient,
+    currentMonthExpenseBreakdown,
+    currentMonthOverrun,
+    currentMonthRemaining,
+    expenseRows,
+    expenseSummary,
+    getCellInputValue,
+    getEffectiveCellAmount,
+    incomeRows,
+    incomeSummary,
+    invalidMonths,
+    isMonthEditable,
+    liveCashflowSummary,
+    matrixColSpan,
+    matrixMonths,
+    plannedClosingBalance,
+    plannedIncomeExpansion,
+    remainingActualIncome,
+    saveBlocked
+  } = buildBudgetMatrixModel({ budgetMatrix, matrixEdits });
 
   const getBucketRow = (bucketKey: string) =>
     (budgetMatrix?.categories || []).find((row: any) => String(row.id) === bucketKey);
@@ -267,7 +233,7 @@ export function useBudgetsWorkspace() {
   };
 
   const openMatrixDrilldown = async (
-    event: React.MouseEvent,
+    event: MouseEvent,
     row: any,
     month: string,
     options?: { subcategory?: any }
@@ -493,253 +459,7 @@ export function useBudgetsWorkspace() {
     setMatrixEdits(next);
   };
 
-  const matrixMonths: string[] = budgetMatrix?.months || [];
-  const incomeRows = (budgetMatrix?.categories || [])
-    .filter((row: any) => row.type === "income")
-    .sort((a: any, b: any) => (b.total_income || 0) - (a.total_income || 0));
-  const expenseRows = (budgetMatrix?.categories || [])
-    .filter((row: any) => row.type !== "income")
-    .sort((a: any, b: any) => (b.total_expense || 0) - (a.total_expense || 0));
-  const matrixColSpan = matrixMonths.length + 5;
-  const budgetCurrency = budgetMatrix?.base_currency || "USD";
-  const openingLiquidBalance = Number(budgetMatrix?.totals?.opening_liquid_balance || 0);
-  const cashTolerance = 50;
-  const monthPlanning = matrixMonths.map((month) => {
-    const state = getMonthState(month);
-    const incomeActual = incomeRows.reduce((sum: number, row: any) => sum + Number(row.income?.[month] || 0), 0);
-    const expenseActual = expenseRows.reduce((sum: number, row: any) => sum + Number(row.expense?.[month] || 0), 0);
-    const plannedIncome = incomeRows.reduce((sum: number, row: any) => sum + getEffectiveCellAmount(row, month), 0);
-    const plannedExpense = expenseRows.reduce((sum: number, row: any) => sum + getEffectiveCellAmount(row, month), 0);
-    const remaining = plannedIncome - plannedExpense;
-    return {
-      month,
-      state,
-      editable: isMonthEditable(month),
-      incomeActual,
-      expenseActual,
-      plannedIncome,
-      plannedExpense,
-      remaining
-    };
-  });
-  let plannedClosingBalance = openingLiquidBalance;
-  let actualClosingBalance = openingLiquidBalance;
-  const monthPlanningWithBalances = monthPlanning.map((row) => {
-    plannedClosingBalance += row.remaining;
-    actualClosingBalance += row.incomeActual - row.expenseActual;
-    return {
-      ...row,
-      plannedClosingBalance,
-      actualClosingBalance
-    };
-  });
-  const invalidMonths = monthPlanningWithBalances.filter(
-    (row) => row.state !== "past" && row.plannedClosingBalance < -cashTolerance - 0.005
-  );
-  const saveBlocked = invalidMonths.length > 0;
-  const summarizeMatrixSection = (rows: any[], field: "income" | "expense") => {
-    let plannedTotal = 0;
-    let actualTotal = 0;
-    const byMonth = matrixMonths.map((month) => {
-      const planned = rows.reduce((sum, row) => sum + getEffectiveCellAmount(row, month), 0);
-      const actual = rows.reduce((sum, row) => sum + Number(row[field]?.[month] || 0), 0);
-      plannedTotal += planned;
-      actualTotal += actual;
-      return { month, planned, actual };
-    });
-    return {
-      byMonth,
-      plannedTotal,
-      actualTotal,
-      variance: plannedTotal - actualTotal
-    };
-  };
-  const incomeSummary = summarizeMatrixSection(incomeRows, "income");
-  const expenseSummary = summarizeMatrixSection(expenseRows, "expense");
-  const balanceSummary = {
-    byMonth: monthPlanningWithBalances.map(({ month, state, actualClosingBalance }) => ({
-      month,
-      actual: state === "future" ? null : actualClosingBalance
-    })),
-    actualTotal:
-      [...monthPlanningWithBalances]
-        .reverse()
-        .find((row) => row.state !== "future")?.actualClosingBalance ?? null
-  };
-  const liveCashflowSummary = {
-    byMonth: monthPlanning.map(({ month, remaining }) => ({
-      month,
-      actual: remaining
-    }))
-  };
-  const currentMonthPlan = monthPlanning.find((row) => row.month === currentBudgetMonth) || null;
-  const currentMonthActualIncome = Number(currentMonthPlan?.incomeActual || 0);
-  const currentMonthActualExpense = Number(currentMonthPlan?.expenseActual || 0);
-  const currentMonthPlannedIncome = Number(currentMonthPlan?.plannedIncome || 0);
-  const plannedIncomeExpansion = Math.max(currentMonthPlannedIncome - currentMonthActualIncome, 0);
-  const chartAvailableIncome = currentMonthActualIncome + plannedIncomeExpansion;
-  const chartUsedAmount = Math.min(currentMonthActualExpense, chartAvailableIncome);
-  const remainingActualIncome = Math.max(currentMonthActualIncome - chartUsedAmount, 0);
-  const remainingPlannedIncome = Math.max(chartAvailableIncome - chartUsedAmount - remainingActualIncome, 0);
-  const currentMonthOverrun = Math.max(currentMonthActualExpense - chartAvailableIncome, 0);
-  const currentMonthRemaining = Math.max(chartAvailableIncome - currentMonthActualExpense, 0);
-  const currentMonthExpenseBreakdown = expenseRows
-    .map((row: any, index: number) => ({
-      id: String(row.id),
-      name: row.name,
-      actual: Number(row.expense?.[currentBudgetMonth] || 0),
-      color: MATRIX_BREAKDOWN_COLORS[index % MATRIX_BREAKDOWN_COLORS.length]
-    }))
-    .filter((row: any) => row.actual > 0)
-    .sort((a: any, b: any) => b.actual - a.actual)
-    .map((row: any, index: number) => ({
-      ...row,
-      color: MATRIX_BREAKDOWN_COLORS[index % MATRIX_BREAKDOWN_COLORS.length],
-      share: currentMonthActualExpense > 0 ? row.actual / currentMonthActualExpense : 0
-    }));
-  const currentMonthChartGradient = buildConicGradient([
-    ...currentMonthExpenseBreakdown.map((row: any) => ({
-      value: currentMonthActualExpense > 0 ? chartUsedAmount * row.share : 0,
-      color: row.color
-    })),
-    { value: remainingActualIncome, color: "#2a9d8f" },
-    { value: remainingPlannedIncome, color: "#8ecae6" }
-  ]);
   const matrixDrilldownSubcategories = matrixDrilldown ? matrixSubcategoriesForBucket(matrixDrilldown.bucket_name || "") : [];
-
-  const renderSubcategoryRows = (row: any) => {
-    if (!hasSubcategoryRows(row) || !isMatrixRowExpanded(String(row.id))) return null;
-    return (row.subcategories || []).map((subcategory: any) => {
-      const renameKey = String(subcategory.subcategory_id || "");
-      const isRenaming = Boolean(subcategory.subcategory_id) && editingMatrixSubcategoryId === renameKey;
-      const actualTotal = matrixMonths.reduce(
-        (sum, month) =>
-          sum + Number((subcategory.type === "income" ? subcategory.income?.[month] : subcategory.expense?.[month]) || 0),
-        0
-      );
-      return (
-        <tr key={`subcategory-${row.id}-${subcategory.id}`} className="matrix-subrow">
-          <td className="matrix-label-cell matrix-subcategory-label-cell">
-            <div className="matrix-label-main">
-              <span className="matrix-subcategory-indent">↳</span>
-              {isRenaming ? (
-                <>
-                  <input
-                    className="matrix-subcategory-input"
-                    value={matrixSubcategoryRenameValues[renameKey] || ""}
-                    onChange={(event) =>
-                      setMatrixSubcategoryRenameValues((prev) => ({ ...prev, [renameKey]: event.target.value }))
-                    }
-                  />
-                  <button
-                    className="matrix-subcategory-action"
-                    onClick={() => saveMatrixSubcategoryRename(row, subcategory)}
-                    disabled={matrixBusy}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="matrix-subcategory-action"
-                    onClick={() => {
-                      setEditingMatrixSubcategoryId(null);
-                      setMatrixSubcategoryRenameValues((prev) => ({ ...prev, [renameKey]: subcategory.name || "" }));
-                    }}
-                    disabled={matrixBusy}
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span>{subcategory.name}</span>
-                  {subcategory.subcategory_id && !subcategory.is_unassigned && (
-                    <>
-                      <button
-                        className="matrix-subcategory-action"
-                        onClick={() => {
-                          setEditingMatrixSubcategoryId(renameKey);
-                          setMatrixSubcategoryRenameValues((prev) => ({
-                            ...prev,
-                            [renameKey]: subcategory.name || ""
-                          }));
-                        }}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        className="matrix-subcategory-action"
-                        onClick={() => deleteMatrixSubcategory(row, subcategory)}
-                        disabled={matrixBusy}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </td>
-          {matrixMonths.map((month) => {
-            const actual = Number(
-              (subcategory.type === "income" ? subcategory.income?.[month] : subcategory.expense?.[month]) || 0
-            );
-            return (
-              <td
-                key={`subcategory-${row.id}-${subcategory.id}-${month}`}
-                className="matrix-cell matrix-cell-drillable matrix-subcategory-cell"
-                onContextMenu={(event) => openMatrixDrilldown(event, row, month, { subcategory })}
-                title="Right-click to inspect transactions behind this subcategory actual"
-              >
-                {actual > 0 ? renderMatrixMoney(actual, budgetCurrency) : "—"}
-              </td>
-            );
-          })}
-          <td className="matrix-total-cell">—</td>
-          <td className="matrix-total-cell">{renderMatrixMoney(actualTotal, budgetCurrency)}</td>
-          <td className="matrix-total-cell">—</td>
-          <td className="matrix-action-cell">—</td>
-        </tr>
-      );
-    });
-  };
-
-  const renderInlineSubcategoryEditor = (row: any) => {
-    if (addingMatrixSubcategoryFor !== String(row.id)) return null;
-    return (
-      <div className="matrix-inline-subcategory-editor">
-        <input
-          className="matrix-subcategory-input"
-          placeholder={`Add ${row.name} subcategory`}
-          value={matrixSubcategoryDrafts[String(row.id)] || ""}
-          onChange={(event) =>
-            setMatrixSubcategoryDrafts((prev) => ({ ...prev, [String(row.id)]: event.target.value }))
-          }
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              createMatrixSubcategory(row);
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setAddingMatrixSubcategoryFor(null);
-            }
-          }}
-        />
-        <button className="matrix-subcategory-action" onClick={() => createMatrixSubcategory(row)} disabled={matrixBusy}>
-          Add
-        </button>
-        <button
-          className="matrix-subcategory-action"
-          onClick={() => {
-            setAddingMatrixSubcategoryFor(null);
-          }}
-          disabled={matrixBusy}
-        >
-          Cancel
-        </button>
-      </div>
-    );
-  };
 
   const createMatrixSubcategory = async (row: any) => {
     const rowId = String(row.id);
@@ -815,6 +535,27 @@ export function useBudgetsWorkspace() {
       setMatrixBusy(false);
     }
   };
+
+  const { renderInlineSubcategoryEditor, renderSubcategoryRows } = createBudgetSubcategoryRenderers({
+    addingMatrixSubcategoryFor,
+    budgetCurrency,
+    createMatrixSubcategory,
+    deleteMatrixSubcategory,
+    editingMatrixSubcategoryId,
+    hasSubcategoryRows,
+    isMatrixRowExpanded,
+    matrixBusy,
+    matrixMonths,
+    matrixSubcategoryDrafts,
+    matrixSubcategoryRenameValues,
+    openMatrixDrilldown,
+    renderMatrixMoney,
+    saveMatrixSubcategoryRename,
+    setAddingMatrixSubcategoryFor,
+    setEditingMatrixSubcategoryId,
+    setMatrixSubcategoryDrafts,
+    setMatrixSubcategoryRenameValues
+  });
 
   const saveMatrixBaseCurrency = async () => {
     setMatrixError(null);
