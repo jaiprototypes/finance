@@ -47,6 +47,10 @@ SPLIT_FRONTEND_FEATURES = {
     "timesheets",
     "transactions",
 }
+SECTIONED_FRONTEND_FEATURES = {
+    "business",
+    "settings",
+}
 
 
 def _python_files(root: Path):
@@ -339,3 +343,14 @@ def test_large_frontend_features_are_split_into_components():
         assert workspace.exists()
         assert view.exists()
         assert len((feature_dir / f"{feature.title().replace(' ', '')}Page.tsx").read_text(encoding="utf-8").splitlines()) <= 80
+
+
+def test_largest_frontend_views_are_split_into_sections():
+    feature_root = ROOT / "apps" / "desktop" / "src" / "features"
+    for feature in SECTIONED_FRONTEND_FEATURES:
+        components_dir = feature_root / feature / "components"
+        sections_dir = components_dir / "sections"
+        assert sections_dir.exists()
+        assert len(list(sections_dir.glob("*.tsx"))) >= 5
+        for section in sections_dir.glob("*.tsx"):
+            assert len(section.read_text(encoding="utf-8").splitlines()) <= 650
