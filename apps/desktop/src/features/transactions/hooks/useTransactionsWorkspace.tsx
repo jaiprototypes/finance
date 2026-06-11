@@ -1,48 +1,15 @@
-import React, { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { removeFeatureRecord, getFeatureData, sendFeatureCommand, featureUrl, uploadTransactionAttachment } from "../api";
 import {
   BoxTitle,
-  CollapsibleSection,
-  DEFAULT_LOCAL_AI_BASE_URL,
-  DEFAULT_LOCAL_AI_MODEL,
-  DEFAULT_LOCAL_AI_TIMEOUT_SECONDS,
-  EMPTY_INVOICE_PREVIEW_PROFILE,
-  InvoiceSheetPreview,
-  MATRIX_BREAKDOWN_COLORS,
-  PLAID_REFRESH_EVENT_KEY,
   RowDisclosureButton,
   SectionHeader,
-  WorkspaceInsightCard,
-  buildConicGradient,
-  clearPendingPlaidLinkSession,
-  currentMonthLabel,
   formatAmount,
-  formatCompactCurrency,
   formatCount,
   formatCurrency,
-  formatDuration,
-  formatFileSize,
-  formatHours,
-  formatMonthLabel,
-  formatMonthYearLabel,
-  formatPlaidLinkExitError,
-  formatRemainingSummary,
-  formatSignedCurrency,
-  formatTimestampLabel,
-  isClosedReceivableStatus,
-  loadPlaidScript,
-  monthStateLabel,
-  normalizeLlmSettings,
-  notifyPlaidRefresh,
-  renderMatrixMoney,
-  savePendingPlaidLinkSession,
   toDateValue,
-  toDatetimeLocal,
-  toLogoSrc,
-  todayDate,
-  weekStartLabel
 } from "../../../shared/financeUi";
-import type { InvoicePreviewProfile, LlmSettings } from "../../../shared/financeUi";
+import { buildTransactionsWorkspaceModel } from "./transactionsWorkspaceModel";
 
 export type TransactionsWorkspaceProps = {
   accountFocus: string;
@@ -95,16 +62,6 @@ export function useTransactionsWorkspace({
     setAccounts(accs);
     setCategories(cats);
   };
-
-  const subcategoriesForCategory = (categoryId: string) => {
-    const selected = categories.find((category) => String(category.id) === categoryId);
-    return selected?.subcategories || [];
-  };
-
-  const formatSplitCategoryLabel = (split: any) =>
-    split.subcategory_name
-      ? `${split.category_name || "Uncategorized"} / ${split.subcategory_name}`
-      : split.category_name || "Uncategorized";
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -383,11 +340,25 @@ export function useTransactionsWorkspace({
     load();
   };
 
-  const reviewTransactions = transactions.filter((txn) =>
-    ["pending", "imported"].includes(txn.reconciliation_state || "imported")
-  );
-  const reviewTotal = reviewTransactions.reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
-  const uncategorizedReviewTransactions = reviewTransactions.filter((txn) => !txn.splits || txn.splits.length === 0);
+  const {
+    endIndex,
+    filtered,
+    formatSplitCategoryLabel,
+    pagedFiltered,
+    reviewTotal,
+    reviewTransactions,
+    startIndex,
+    subcategoriesForCategory,
+    summarizeTxnCategory,
+    totalPages,
+    uncategorizedReviewTransactions
+  } = buildTransactionsWorkspaceModel({
+    categories,
+    filters,
+    registerPage,
+    registerPageSize,
+    transactions
+  });
 
   const applyCategoryToReview = async () => {
     setReviewBulkError(null);
@@ -432,32 +403,11 @@ export function useTransactionsWorkspace({
     }
   };
 
-  const filtered = transactions.filter((txn) => {
-    const matchesSearch =
-      !filters.search ||
-      `${txn.description} ${txn.payee || ""}`.toLowerCase().includes(filters.search.toLowerCase());
-    const matchesAccount =
-      filters.account_id === "all" || String(txn.account_id) === filters.account_id;
-    const matchesCategory =
-      filters.category_id === "all" ||
-      (txn.splits || []).some((split: any) => String(split.category_id) === filters.category_id);
-    return matchesSearch && matchesAccount && matchesCategory;
-  });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / registerPageSize));
   useEffect(() => {
     if (registerPage > totalPages) {
       setRegisterPage(totalPages);
     }
   }, [registerPage, totalPages]);
-  const startIndex = filtered.length === 0 ? 0 : (registerPage - 1) * registerPageSize + 1;
-  const endIndex = Math.min(registerPage * registerPageSize, filtered.length);
-  const pagedFiltered = filtered.slice((registerPage - 1) * registerPageSize, registerPage * registerPageSize);
-  const summarizeTxnCategory = (txn: any) => {
-    const splits = txn.splits || [];
-    if (!splits.length) return "Uncategorized";
-    if (splits.length === 1) return formatSplitCategoryLabel(splits[0]);
-    return `${formatSplitCategoryLabel(splits[0])} +${formatCount(splits.length - 1)}`;
-  };
   const toggleTransactionDetails = async (txnId: number) => {
     if (expandedTransactionId === txnId) {
       setExpandedTransactionId(null);

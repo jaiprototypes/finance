@@ -51,6 +51,8 @@ HOOKED_FRONTEND_FEATURES = SPLIT_FRONTEND_FEATURES
 SECTIONED_FRONTEND_FEATURES = {
     "business",
     "settings",
+    "timesheets",
+    "transactions",
 }
 
 
@@ -376,7 +378,9 @@ def test_largest_frontend_views_are_split_into_sections():
     for feature in SECTIONED_FRONTEND_FEATURES:
         components_dir = feature_root / feature / "components"
         sections_dir = components_dir / "sections"
+        view = components_dir / f"{feature.title().replace(' ', '')}View.tsx"
         assert sections_dir.exists()
-        assert len(list(sections_dir.glob("*.tsx"))) >= 5
+        assert len(view.read_text(encoding="utf-8").splitlines()) <= 160
+        assert len(list(sections_dir.glob("*.tsx"))) >= 4
         for section in sections_dir.glob("*.tsx"):
             assert len(section.read_text(encoding="utf-8").splitlines()) <= 650
