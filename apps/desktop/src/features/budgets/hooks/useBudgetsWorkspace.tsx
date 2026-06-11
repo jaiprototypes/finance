@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useState } from "react";
-import type { MouseEvent } from "react";
 import { removeFeatureRecord, getFeatureData, sendFeatureCommand } from "../api";
 import {
   BoxTitle,
@@ -13,6 +12,7 @@ import {
 } from "../../../shared/financeUi";
 import { buildBudgetMatrixModel } from "./budgetMatrixModel";
 import { createBudgetSubcategoryRenderers } from "./budgetSubcategoryRenderers";
+import { useBudgetMatrixDrilldown } from "./useBudgetMatrixDrilldown";
 
 export function useBudgetsWorkspace() {
   const [months, setMonths] = useState<any[]>([]);
@@ -24,9 +24,6 @@ export function useBudgetsWorkspace() {
   const [matrixBusy, setMatrixBusy] = useState(false);
   const [matrixBaseCurrency, setMatrixBaseCurrency] = useState("USD");
   const [matrixBaseCurrencyStatus, setMatrixBaseCurrencyStatus] = useState<string | null>(null);
-  const [matrixDrilldown, setMatrixDrilldown] = useState<any | null>(null);
-  const [matrixDrilldownAssignments, setMatrixDrilldownAssignments] = useState<Record<string, string>>({});
-  const [matrixDrilldownBusySplitId, setMatrixDrilldownBusySplitId] = useState<number | null>(null);
   const [expandedMatrixRows, setExpandedMatrixRows] = useState<Record<string, boolean>>({});
   const [addingMatrixSubcategoryFor, setAddingMatrixSubcategoryFor] = useState<string | null>(null);
   const [matrixSubcategoryDrafts, setMatrixSubcategoryDrafts] = useState<Record<string, string>>({});
@@ -53,7 +50,6 @@ export function useBudgetsWorkspace() {
     const year = yearValue || matrixYear;
     const data = await getFeatureData<any>(`/reports/budget-matrix?year=${year}`);
     setBudgetMatrix(data);
-    setMatrixDrilldown(null);
     setMatrixBaseCurrency(data.base_currency || "USD");
     const edits: Record<string, Record<string, string>> = {};
     (data.categories || []).forEach((category: any) => {
@@ -82,17 +78,6 @@ export function useBudgetsWorkspace() {
   useEffect(() => {
     loadMatrix().catch(() => undefined);
   }, [matrixYear]);
-
-  useEffect(() => {
-    if (!matrixDrilldown) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMatrixDrilldown(null);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [matrixDrilldown]);
 
   const ensureMonthId = async (month: string) => {
     const existing = months.find((row) => row.month === month);
@@ -141,8 +126,6 @@ export function useBudgetsWorkspace() {
     (budgetMatrix?.categories || []).find((row: any) => String(row.id) === bucketKey);
   const getMatrixCategoryForRow = (row: any) =>
     (matrixCategories || []).find((category: any) => category.name === row.name);
-  const matrixSubcategoriesForBucket = (bucketName: string) =>
-    ((matrixCategories || []).find((category: any) => category.name === bucketName)?.subcategories || []);
 
   const hasSubcategoryRows = (row: any) => (row?.subcategories || []).length > 0;
   const isMatrixRowExpanded = (rowId: string) => Boolean(expandedMatrixRows[rowId]);
@@ -154,162 +137,24 @@ export function useBudgetsWorkspace() {
     setMatrixSubcategoryDrafts((prev) => ({ ...prev, [rowId]: prev[rowId] || "" }));
   };
 
-  const loadMatrixDrilldownData = async ({
-    left,
-    top,
-    row,
-    month,
-    subcategory
-  }: {
-    left: number;
-    top: number;
-    row: any;
-    month: string;
-    subcategory?: any | null;
-  }) => {
-    const actual =
-      row.type === "income" ? Number(row.income?.[month] || 0) : Number(row.expense?.[month] || 0);
-    const nextSubcategory = subcategory || null;
-    const rowName = nextSubcategory ? `${row.name} / ${nextSubcategory.name}` : row.name;
-    setMatrixDrilldownAssignments({});
-    setMatrixDrilldown({
-      left,
-      top,
-      month,
-      rowName,
-      bucket_key: String(row.id),
-      bucket_type: row.type,
-      bucket_name: row.name,
-      subcategory_name: nextSubcategory?.name || null,
-      subcategory_id: nextSubcategory?.subcategory_id || null,
-      unassigned: Boolean(nextSubcategory?.is_unassigned),
-      actual_total: actual,
-      transactions: [],
-      loading: true,
-      error: null
-    });
-    try {
-      const query = new URLSearchParams({
-        month,
-        bucket: String(row.id)
-      });
-      if (nextSubcategory?.subcategory_id) {
-        query.set("subcategory_id", String(nextSubcategory.subcategory_id));
-      } else if (nextSubcategory?.is_unassigned) {
-        query.set("unassigned", "true");
-      }
-      const data = await getFeatureData<any>(`/reports/budget-cell-transactions?${query.toString()}`);
-      setMatrixDrilldown({
-        ...data,
-        left,
-        top,
-        rowName,
-        bucket_key: String(row.id),
-        bucket_type: row.type,
-        subcategory_name: nextSubcategory?.name || null,
-        subcategory_id: nextSubcategory?.subcategory_id || null,
-        unassigned: Boolean(nextSubcategory?.is_unassigned),
-        loading: false,
-        error: null
-      });
-    } catch (err) {
-      setMatrixDrilldown({
-        left,
-        top,
-        month,
-        rowName,
-        bucket_key: String(row.id),
-        bucket_type: row.type,
-        bucket_name: row.name,
-        subcategory_name: nextSubcategory?.name || null,
-        subcategory_id: nextSubcategory?.subcategory_id || null,
-        unassigned: Boolean(nextSubcategory?.is_unassigned),
-        actual_total: actual,
-        transactions: [],
-        loading: false,
-        error: err instanceof Error ? err.message : "Unable to load transactions."
-      });
-    }
-  };
-
-  const openMatrixDrilldown = async (
-    event: MouseEvent,
-    row: any,
-    month: string,
-    options?: { subcategory?: any }
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const panelWidth = 360;
-    const panelHeight = 420;
-    const gutter = 16;
-    const left =
-      typeof window !== "undefined"
-        ? Math.max(gutter, Math.min(event.clientX, window.innerWidth - panelWidth - gutter))
-        : event.clientX;
-    const top =
-      typeof window !== "undefined"
-        ? Math.max(gutter, Math.min(event.clientY, window.innerHeight - panelHeight - gutter))
-        : event.clientY;
-    await loadMatrixDrilldownData({ left, top, row, month, subcategory: options?.subcategory || null });
-  };
-
-  const applyMatrixDrilldownSubcategory = async (txn: any) => {
-    const splitId = Number(txn.split_id || 0);
-    const selectedValue = matrixDrilldownAssignments[String(splitId)] ?? (txn.subcategory_id ? String(txn.subcategory_id) : "");
-    const subcategoryId = Number(selectedValue || 0);
-    const rowCategory = matrixDrilldown ? (matrixCategories || []).find((category: any) => category.name === matrixDrilldown.bucket_name) : null;
-    if (!splitId || !subcategoryId || !rowCategory?.id || !matrixDrilldown) {
-      setMatrixError("Select a subcategory before applying it.");
-      return;
-    }
-    setMatrixError(null);
-    setMatrixBusy(true);
-    setMatrixDrilldownBusySplitId(splitId);
-    try {
-      const result = await sendFeatureCommand<any>(`/transactions/splits/${splitId}`, {
-        category_id: rowCategory.id,
-        subcategory_id: subcategoryId,
-        classification: "Personal",
-        cascade_matching_merchant: true
-      });
-      await loadMatrixCategories();
-      const nextMatrix = await loadMatrix(matrixYear);
-      const refreshedRow =
-        (nextMatrix?.categories || []).find((row: any) => String(row.id) === String(matrixDrilldown.bucket_key)) ||
-        {
-          id: matrixDrilldown.bucket_key,
-          name: matrixDrilldown.bucket_name,
-          type: matrixDrilldown.bucket_type,
-          income: {},
-          expense: {},
-        };
-      const refreshSubcategory =
-        matrixDrilldown.subcategory_id
-          ? { subcategory_id: matrixDrilldown.subcategory_id, name: matrixDrilldown.subcategory_name }
-          : matrixDrilldown.unassigned
-            ? { is_unassigned: true, name: matrixDrilldown.subcategory_name || "Unassigned" }
-            : null;
-      await loadMatrixDrilldownData({
-        left: matrixDrilldown.left,
-        top: matrixDrilldown.top,
-        row: refreshedRow,
-        month: matrixDrilldown.month,
-        subcategory: refreshSubcategory,
-      });
-      const cascaded = Number(result?.updated || 0);
-      setMatrixBaseCurrencyStatus(
-        cascaded > 0
-          ? `Subcategory applied and cascaded to ${formatCount(cascaded)} matching transactions.`
-          : "Subcategory applied."
-      );
-    } catch (err) {
-      setMatrixError(err instanceof Error ? err.message : "Unable to apply subcategory.");
-    } finally {
-      setMatrixBusy(false);
-      setMatrixDrilldownBusySplitId(null);
-    }
-  };
+  const {
+    applyMatrixDrilldownSubcategory,
+    matrixDrilldown,
+    matrixDrilldownAssignments,
+    matrixDrilldownBusySplitId,
+    matrixDrilldownSubcategories,
+    openMatrixDrilldown,
+    setMatrixDrilldown,
+    setMatrixDrilldownAssignments
+  } = useBudgetMatrixDrilldown({
+    loadMatrix,
+    loadMatrixCategories,
+    matrixCategories,
+    matrixYear,
+    setMatrixBaseCurrencyStatus,
+    setMatrixBusy,
+    setMatrixError
+  });
 
   const assertMatrixBudgetable = () => {
     const invalid = invalidMonths.filter((row) => row.state !== "past");
@@ -363,6 +208,7 @@ export function useBudgetsWorkspace() {
     try {
       await persistMatrixBucket(row, {});
       await loadMonths();
+      setMatrixDrilldown(null);
       await loadMatrix();
     } catch (err) {
       setMatrixError(err instanceof Error ? err.message : "Unable to save row.");
@@ -432,6 +278,7 @@ export function useBudgetsWorkspace() {
         });
       }
       await loadMonths();
+      setMatrixDrilldown(null);
       await loadMatrix();
     } catch (err) {
       setMatrixError(err instanceof Error ? err.message : "Unable to save matrix.");
@@ -459,8 +306,6 @@ export function useBudgetsWorkspace() {
     setMatrixEdits(next);
   };
 
-  const matrixDrilldownSubcategories = matrixDrilldown ? matrixSubcategoriesForBucket(matrixDrilldown.bucket_name || "") : [];
-
   const createMatrixSubcategory = async (row: any) => {
     const rowId = String(row.id);
     const name = (matrixSubcategoryDrafts[rowId] || "").trim();
@@ -478,6 +323,7 @@ export function useBudgetsWorkspace() {
     try {
       await sendFeatureCommand(`/categories/${category.id}/subcategories`, { name, is_active: true });
       await loadMatrixCategories();
+      setMatrixDrilldown(null);
       await loadMatrix(matrixYear);
       setExpandedMatrixRows((prev) => ({ ...prev, [rowId]: true }));
       setAddingMatrixSubcategoryFor(null);
@@ -501,6 +347,7 @@ export function useBudgetsWorkspace() {
     try {
       await sendFeatureCommand(`/categories/subcategories/${subcategory.subcategory_id}`, { name, is_active: true });
       await loadMatrixCategories();
+      setMatrixDrilldown(null);
       await loadMatrix(matrixYear);
       setExpandedMatrixRows((prev) => ({ ...prev, [String(row.id)]: true }));
       setEditingMatrixSubcategoryId(null);
@@ -524,6 +371,7 @@ export function useBudgetsWorkspace() {
         `/categories/subcategories/${subcategory.subcategory_id}`
       );
       await loadMatrixCategories();
+      setMatrixDrilldown(null);
       await loadMatrix(matrixYear);
       setExpandedMatrixRows((prev) => ({ ...prev, [String(row.id)]: true }));
       setMatrixBaseCurrencyStatus(
@@ -564,6 +412,7 @@ export function useBudgetsWorkspace() {
     try {
       await sendFeatureCommand("/settings", { base_currency: matrixBaseCurrency });
       await loadMonths();
+      setMatrixDrilldown(null);
       await loadMatrix(matrixYear);
       setMatrixBaseCurrencyStatus(`Budget matrix base currency updated to ${matrixBaseCurrency}.`);
     } catch (err) {
@@ -606,6 +455,7 @@ export function useBudgetsWorkspace() {
         }
       }
       await loadMonths();
+      setMatrixDrilldown(null);
       await loadMatrix(matrixYear);
       if (syncErrors.length > 0) {
         setMatrixError(syncErrors.join(" · "));

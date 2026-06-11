@@ -17,6 +17,7 @@ import {
 } from "../../../shared/financeUi";
 import type { InvoicePreviewProfile } from "../../../shared/financeUi";
 import { buildBusinessWorkspaceModel } from "./businessWorkspaceModel";
+import { useBusinessArchiveDetail } from "./useBusinessArchiveDetail";
 import { useInvoicePdfTools } from "./useInvoicePdfTools";
 
 export type BusinessWorkspaceProps = {
@@ -36,7 +37,6 @@ export function useBusinessWorkspace({
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
   const [paymentAmounts, setPaymentAmounts] = useState<Record<number, string>>({});
   const [invoiceRecipientEmails, setInvoiceRecipientEmails] = useState<Record<number, string>>({});
-  const [archivePaymentAmounts, setArchivePaymentAmounts] = useState<Record<number, string>>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoiceNotice, setInvoiceNotice] = useState<string | null>(null);
   const [invoiceSendError, setInvoiceSendError] = useState<string | null>(null);
@@ -48,8 +48,6 @@ export function useBusinessWorkspace({
   const [showSettledInvoices, setShowSettledInvoices] = useState(false);
   const [archivePickerKey, setArchivePickerKey] = useState(0);
   const [selectedArchiveId, setSelectedArchiveId] = useState<number | null>(null);
-  const [archiveDetail, setArchiveDetail] = useState<any | null>(null);
-  const [archiveDetailLoading, setArchiveDetailLoading] = useState(false);
   const [archiveFilter, setArchiveFilter] = useState("");
   const [expandedClientId, setExpandedClientId] = useState<number | null>(null);
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<number | null>(null);
@@ -91,6 +89,26 @@ export function useBusinessWorkspace({
     invoicePreviewBusy,
     openInvoicePreview
   } = useInvoicePdfTools({ setInvoiceError, setInvoiceNotice });
+  const {
+    applyArchivePayment,
+    archiveDetail,
+    archiveDetailLoading,
+    archiveEditForm,
+    archivePaymentAmounts,
+    deleteArchive,
+    removeArchivePayment,
+    saveArchiveDetail,
+    setArchiveEditForm,
+    setArchivePaymentAmounts,
+    syncArchiveDetail
+  } = useBusinessArchiveDetail({
+    archivedInvoices,
+    refresh,
+    selectedArchiveId,
+    setArchiveError,
+    setArchiveNotice,
+    setSelectedArchiveId
+  });
 
   const businessModel = buildBusinessWorkspaceModel({
     archiveDetail,
@@ -193,8 +211,8 @@ export function useBusinessWorkspace({
     archiveIntakeRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [archiveIntakeOpenToken]);
 
-  const refresh = (preferredArchiveId?: number | null) => {
-    Promise.all([
+  function refresh(preferredArchiveId?: number | null) {
+    return Promise.all([
       getFeatureData<any[]>("/business/clients").catch(() => []),
       getFeatureData<any[]>("/business/invoices").catch(() => []),
       getFeatureData<any[]>("/business/invoice-archives").catch(() => []),
@@ -208,7 +226,7 @@ export function useBusinessWorkspace({
         setSelectedArchiveId(preferredArchiveId);
       }
     });
-  };
+  }
 
   const resetClientForm = () => {
     setEditingClientId(null);
@@ -290,69 +308,6 @@ export function useBusinessWorkspace({
     setArchivePickerKey((prev) => prev + 1);
     setArchiveIntakeOpenToken((prev) => prev + 1);
   };
-
-  const syncArchiveDetail = (detail: any) => {
-    setArchiveDetail(detail);
-    const invoice = detail?.invoice || {};
-    const defaults: Record<number, string> = {};
-    (detail?.candidate_transactions || []).forEach((candidate: any) => {
-      const suggested = Math.max(
-        0,
-        Math.min(Number(detail?.balance_due || 0), Number(candidate?.available_amount || 0))
-      );
-      defaults[candidate.id] = suggested > 0 ? String(suggested) : "";
-    });
-    setArchivePaymentAmounts(defaults);
-    return {
-      client_id: String(invoice.client_id || ""),
-      number: invoice.number || "",
-      issue_date: toDateValue(invoice.issue_date),
-      due_date: toDateValue(invoice.due_date),
-      currency: invoice.currency || "USD",
-      total: String(invoice.total ?? ""),
-      status: invoice.status || "archived",
-      notes: invoice.notes || ""
-    };
-  };
-
-  const [archiveEditForm, setArchiveEditForm] = useState({
-    client_id: "",
-    number: "",
-    issue_date: "",
-    due_date: "",
-    currency: "USD",
-    total: "",
-    status: "archived",
-    notes: ""
-  });
-
-  useEffect(() => {
-    if (!archivedInvoices.length) {
-      setSelectedArchiveId(null);
-      setArchiveDetail(null);
-      return;
-    }
-    if (!selectedArchiveId || !archivedInvoices.some((archive) => archive.id === selectedArchiveId)) {
-      setSelectedArchiveId(archivedInvoices[0].id);
-    }
-  }, [archivedInvoices, selectedArchiveId]);
-
-  useEffect(() => {
-    if (!selectedArchiveId) {
-      setArchiveDetail(null);
-      return;
-    }
-    setArchiveDetailLoading(true);
-    setArchiveError(null);
-    getFeatureData<any>(`/business/invoice-archives/${selectedArchiveId}`)
-      .then((detail) => {
-        setArchiveEditForm(syncArchiveDetail(detail));
-      })
-      .catch((err) => {
-        setArchiveError(err instanceof Error ? err.message : "Unable to load historical invoice.");
-      })
-      .finally(() => setArchiveDetailLoading(false));
-  }, [selectedArchiveId]);
 
   const saveClient = async () => {
     setClientError(null);
@@ -568,76 +523,6 @@ export function useBusinessWorkspace({
     }
   };
 
-  const saveArchiveDetail = async () => {
-    if (!selectedArchiveId) return;
-    setArchiveError(null);
-    setArchiveNotice(null);
-    if (!archiveEditForm.client_id) {
-      setArchiveError("Select a client for the historical invoice.");
-      return;
-    }
-    const totalValue = Number(archiveEditForm.total);
-    if (!Number.isFinite(totalValue) || totalValue < 0) {
-      setArchiveError("Historical invoice total must be a valid non-negative number.");
-      return;
-    }
-    try {
-      const detail = await sendFeatureCommand<any>(`/business/invoice-archives/${selectedArchiveId}`, {
-        client_id: Number(archiveEditForm.client_id),
-        number: archiveEditForm.number || undefined,
-        issue_date: archiveEditForm.issue_date || undefined,
-        due_date: archiveEditForm.due_date || undefined,
-        currency: archiveEditForm.currency,
-        total: totalValue,
-        status: archiveEditForm.status,
-        notes: archiveEditForm.notes || undefined
-      });
-      setArchiveEditForm(syncArchiveDetail(detail));
-      setArchiveNotice("Historical invoice updated.");
-      refresh();
-    } catch (err) {
-      setArchiveError(err instanceof Error ? err.message : "Unable to update historical invoice.");
-    }
-  };
-
-  const removeArchivePayment = async (paymentLinkId: number) => {
-    if (!selectedArchiveId) return;
-    setArchiveError(null);
-    setArchiveNotice(null);
-    try {
-      await removeFeatureRecord(`/business/invoice-archives/${selectedArchiveId}/payments/${paymentLinkId}`);
-      const detail = await getFeatureData<any>(`/business/invoice-archives/${selectedArchiveId}`);
-      setArchiveEditForm(syncArchiveDetail(detail));
-      setArchiveNotice("Receipt link removed.");
-      refresh();
-    } catch (err) {
-      setArchiveError(err instanceof Error ? err.message : "Unable to remove receipt link.");
-    }
-  };
-
-  const applyArchivePayment = async (transactionId: number) => {
-    if (!selectedArchiveId || !archiveDetail) return;
-    const amountValue = Number(archivePaymentAmounts[transactionId]);
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      setArchiveError("Receipt amount must be greater than 0.");
-      return;
-    }
-    setArchiveError(null);
-    setArchiveNotice(null);
-    try {
-      await sendFeatureCommand(`/business/invoice-archives/${selectedArchiveId}/apply-payment`, {
-        transaction_id: transactionId,
-        amount: amountValue
-      });
-      const detail = await getFeatureData<any>(`/business/invoice-archives/${selectedArchiveId}`);
-      setArchiveEditForm(syncArchiveDetail(detail));
-      setArchiveNotice("Receipt linked to historical invoice.");
-      refresh();
-    } catch (err) {
-      setArchiveError(err instanceof Error ? err.message : "Unable to link receipt.");
-    }
-  };
-
   const startEditInvoice = async (invoiceId: number) => {
     try {
       const detail = await getFeatureData<any>(`/business/invoices/${invoiceId}`);
@@ -680,21 +565,6 @@ export function useBusinessWorkspace({
       refresh();
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : "Unable to delete invoice.");
-    }
-  };
-
-  const deleteArchive = async (archiveId: number) => {
-    setArchiveError(null);
-    setArchiveNotice(null);
-    try {
-      await removeFeatureRecord(`/business/invoice-archives/${archiveId}`);
-      if (selectedArchiveId === archiveId) {
-        setSelectedArchiveId(null);
-        setArchiveDetail(null);
-      }
-      refresh();
-    } catch (err) {
-      setArchiveError(err instanceof Error ? err.message : "Unable to delete archived invoice.");
     }
   };
 
