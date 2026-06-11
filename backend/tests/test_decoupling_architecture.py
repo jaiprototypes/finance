@@ -47,6 +47,7 @@ SPLIT_FRONTEND_FEATURES = {
     "timesheets",
     "transactions",
 }
+HOOKED_FRONTEND_FEATURES = SPLIT_FRONTEND_FEATURES
 SECTIONED_FRONTEND_FEATURES = {
     "business",
     "settings",
@@ -334,15 +335,32 @@ def test_large_frontend_features_are_split_into_components():
     for feature in SPLIT_FRONTEND_FEATURES:
         feature_dir = feature_root / feature
         components_dir = feature_dir / "components"
-        workspace = components_dir / f"{feature.title().replace(' ', '')}Workspace.tsx"
-        view = components_dir / f"{feature.title().replace(' ', '')}View.tsx"
+        feature_name = feature.title().replace(" ", "")
+        workspace = components_dir / f"{feature_name}Workspace.tsx"
+        view = components_dir / f"{feature_name}View.tsx"
         if feature == "transactions":
             workspace = components_dir / "TransactionsWorkspace.tsx"
             view = components_dir / "TransactionsView.tsx"
         assert components_dir.exists()
         assert workspace.exists()
         assert view.exists()
+        assert len(workspace.read_text(encoding="utf-8").splitlines()) <= 120
         assert len((feature_dir / f"{feature.title().replace(' ', '')}Page.tsx").read_text(encoding="utf-8").splitlines()) <= 80
+
+
+def test_split_frontend_workspaces_delegate_to_feature_hooks():
+    feature_root = ROOT / "apps" / "desktop" / "src" / "features"
+    for feature in HOOKED_FRONTEND_FEATURES:
+        feature_dir = feature_root / feature
+        feature_name = feature.title().replace(" ", "")
+        hooks_dir = feature_dir / "hooks"
+        workspace = feature_dir / "components" / f"{feature_name}Workspace.tsx"
+        hook = hooks_dir / f"use{feature_name}Workspace.tsx"
+        assert hooks_dir.exists()
+        assert workspace.exists()
+        assert hook.exists()
+        assert f"use{feature_name}Workspace" in workspace.read_text(encoding="utf-8")
+        assert f"export function use{feature_name}Workspace" in hook.read_text(encoding="utf-8")
 
 
 def test_largest_frontend_views_are_split_into_sections():
