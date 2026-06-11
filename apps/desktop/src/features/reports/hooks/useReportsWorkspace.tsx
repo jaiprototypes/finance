@@ -196,6 +196,8 @@ export function useReportsWorkspace() {
     budgetYear,
     setBudgetYear,
     budgetMatrix,
+    budgetExpense,
+    budgetIncome,
     expandedCashflowMonth,
     expandedBudgetMonth,
     expandedPnlMonth,

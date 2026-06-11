@@ -49,7 +49,9 @@ SPLIT_FRONTEND_FEATURES = {
 }
 HOOKED_FRONTEND_FEATURES = SPLIT_FRONTEND_FEATURES
 SECTIONED_FRONTEND_FEATURES = {
+    "budgets",
     "business",
+    "reports",
     "settings",
     "timesheets",
     "transactions",
