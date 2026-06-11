@@ -6,8 +6,7 @@ manifest = FeatureManifest(
     key="diagnostics",
     label="Diagnostics",
     routes=(
-        FeatureRoute(health_router, stable_root=True, compatibility_root=False),
-        FeatureRoute(diagnostics_router, stable_root=True, compatibility_root=False),
+        FeatureRoute(health_router, stable_root=True),
+        FeatureRoute(diagnostics_router, stable_root=True),
     ),
 )
-

@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, downloadDiagnostics, saveBlob } from "./api";
+import { removeFeatureRecord, getFeatureData, sendFeatureCommand } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -64,8 +64,8 @@ export function Accounts({
 
   const load = async () => {
     const [accountsData, netWorth] = await Promise.all([
-      apiGet<any[]>("/accounts"),
-      apiGet<any>("/reports/net-worth")
+      getFeatureData<any[]>("/accounts"),
+      getFeatureData<any>("/reports/net-worth")
     ]);
     setAccounts(accountsData);
     const nextBalances: Record<number, number> = {};
@@ -79,7 +79,7 @@ export function Accounts({
   }, []);
 
   const submit = async () => {
-    await apiPost("/accounts", { ...form, is_active: true });
+    await sendFeatureCommand("/accounts", { ...form, is_active: true });
     setForm({ name: "", type: "bank", currency: "AUD", institution: "", note: "" });
     load();
   };
@@ -97,7 +97,7 @@ export function Accounts({
 
   const saveEdit = async () => {
     if (!editing) return;
-    await apiPost(`/accounts/${editing}`, { ...form, is_active: true });
+    await sendFeatureCommand(`/accounts/${editing}`, { ...form, is_active: true });
     setEditing(null);
     setForm({ name: "", type: "bank", currency: "AUD", institution: "", note: "" });
     load();
@@ -111,7 +111,7 @@ export function Accounts({
   const deleteAccount = async (accountId: number) => {
     const confirmed = window.confirm("Delete this account? It will be archived and removed from lists.");
     if (!confirmed) return;
-    await apiDelete(`/accounts/${accountId}`);
+    await removeFeatureRecord(`/accounts/${accountId}`);
     load();
   };
 

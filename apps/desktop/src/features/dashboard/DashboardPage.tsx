@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, downloadDiagnostics, saveBlob } from "./api";
+import { getFeatureData, featureUrl } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -56,13 +56,13 @@ export function Dashboard() {
   useEffect(() => {
     const currentYear = new Date().getFullYear();
     Promise.all([
-      apiGet<any>("/reports/net-worth"),
-      apiGet<any[]>("/accounts"),
-      apiGet<any[]>("/reports/cashflow"),
-      apiGet<any>(`/reports/budget-matrix?year=${currentYear}`),
-      apiGet<any[]>("/business/invoices"),
-      apiGet<any[]>("/debts/profiles"),
-      apiGet<any[]>("/timesheets/entries")
+      getFeatureData<any>("/reports/net-worth"),
+      getFeatureData<any[]>("/accounts"),
+      getFeatureData<any[]>("/reports/cashflow"),
+      getFeatureData<any>(`/reports/budget-matrix?year=${currentYear}`),
+      getFeatureData<any[]>("/business/invoices"),
+      getFeatureData<any[]>("/debts/profiles"),
+      getFeatureData<any[]>("/timesheets/entries")
     ])
       .then(([netWorthData, accountData, cashflowData, budgetMatrixData, invoicesData, debtData, entriesData]) => {
         setNetWorth(netWorthData);
@@ -266,7 +266,7 @@ export function Dashboard() {
                   <td>{formatCurrency(invoice.balance_due ?? invoice.total, invoice.currency)}</td>
                   <td>{invoice.is_overdue ? `overdue (${invoice.status})` : invoice.status}</td>
                   <td>
-                    <a href={apiUrl(`/business/invoices/${invoice.id}/pdf`)} target="_blank" rel="noreferrer">
+                    <a href={featureUrl(`/business/invoices/${invoice.id}/pdf`)} target="_blank" rel="noreferrer">
                       Open PDF
                     </a>
                   </td>

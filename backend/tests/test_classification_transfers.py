@@ -2,9 +2,11 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from backend.app.models import Account, FXRate, MerchantProfile, Rule, Transaction, TransactionMemory, TransactionSplit
-from backend.app.services import classification
-from backend.app.services.settings import set_setting
+from backend.app.features.classification import service as classification
+from backend.app.features.classification.models import MerchantProfile, Rule, TransactionMemory
+from backend.app.features.fx.models import FXRate
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.settings.service import set_setting
 from backend.tests.utils import make_session
 
 

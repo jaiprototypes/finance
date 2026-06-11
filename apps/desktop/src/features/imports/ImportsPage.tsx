@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, commitImportFile, downloadDiagnostics, previewImportFile, saveBlob } from "./api";
+import { getFeatureData, sendFeatureCommand, commitImportFile, previewImportFile } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -67,8 +67,8 @@ export function Imports() {
   const [expandedBatchId, setExpandedBatchId] = useState<number | null>(null);
 
   useEffect(() => {
-    apiGet<any[]>("/accounts").then(setAccounts).catch(() => undefined);
-    apiGet<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
+    getFeatureData<any[]>("/accounts").then(setAccounts).catch(() => undefined);
+    getFeatureData<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
   }, []);
 
   const handleFile = (selected: File | null) => {
@@ -134,15 +134,15 @@ export function Imports() {
     formData.append("mapping_json", JSON.stringify(mapping));
     try {
       await commitImportFile(formData);
-      apiGet<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
+      getFeatureData<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Unable to commit import.");
     }
   };
 
   const rollback = async (batchId: number) => {
-    await apiPost(`/imports/batches/${batchId}/rollback`);
-    apiGet<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
+    await sendFeatureCommand(`/imports/batches/${batchId}/rollback`);
+    getFeatureData<any[]>("/imports/batches").then(setBatches).catch(() => undefined);
   };
 
   const selectedAccount = accounts.find((account) => String(account.id) === accountId);

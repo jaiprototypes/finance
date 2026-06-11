@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, downloadDiagnostics, saveBlob } from "./api";
+import { removeFeatureRecord, getFeatureData, sendFeatureCommand } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -66,11 +66,11 @@ export function Debts() {
 
   const load = async () => {
     const [profilesData, accountData, netWorth, transactionData, linkData] = await Promise.all([
-      apiGet<any[]>("/debts/profiles"),
-      apiGet<any[]>("/accounts"),
-      apiGet<any>("/reports/net-worth"),
-      apiGet<any[]>("/transactions"),
-      apiGet<any[]>("/debts/links")
+      getFeatureData<any[]>("/debts/profiles"),
+      getFeatureData<any[]>("/accounts"),
+      getFeatureData<any>("/reports/net-worth"),
+      getFeatureData<any[]>("/transactions"),
+      getFeatureData<any[]>("/debts/links")
     ]);
     setProfiles(profilesData);
     setAccounts(accountData);
@@ -111,9 +111,9 @@ export function Debts() {
       compounding: profileForm.compounding
     };
     if (editingProfileId) {
-      await apiPost(`/debts/profiles/${editingProfileId}`, payload);
+      await sendFeatureCommand(`/debts/profiles/${editingProfileId}`, payload);
     } else {
-      await apiPost("/debts/profiles", payload);
+      await sendFeatureCommand("/debts/profiles", payload);
     }
     setEditingProfileId(null);
     setProfileForm({ account_id: "", apr: "", min_payment: "", due_date: "", compounding: "daily" });
@@ -150,7 +150,7 @@ export function Debts() {
         min_payment: profile.min_payment
       };
     });
-    const data = await apiPost("/debts/payoff", {
+    const data = await sendFeatureCommand("/debts/payoff", {
       strategy,
       extra_payment: Number(extraPayment),
       debts
@@ -160,7 +160,7 @@ export function Debts() {
 
   const linkPayment = async () => {
     if (!linkForm.transaction_id || !linkForm.account_id) return;
-    await apiPost("/debts/link-payment", {
+    await sendFeatureCommand("/debts/link-payment", {
       transaction_id: Number(linkForm.transaction_id),
       account_id: Number(linkForm.account_id),
       amount: Number(linkForm.amount || 0)
@@ -237,7 +237,7 @@ export function Debts() {
                     </button>
                     <button
                       onClick={async () => {
-                        await apiDelete(`/debts/profiles/${profile.id}`);
+                        await removeFeatureRecord(`/debts/profiles/${profile.id}`);
                         load();
                       }}
                     >

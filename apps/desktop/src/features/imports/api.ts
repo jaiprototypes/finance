@@ -1,21 +1,11 @@
-export {
-  API_BASE,
-  apiDelete,
-  apiGet,
-  apiGetBlob,
-  apiPost,
-  apiPostForm,
-  apiUrl,
-  downloadDiagnostics,
-  saveBlob
-} from "../../shared/api/client";
+export * from "../../shared/api/featureBoundary";
 
-import { apiPostForm } from "../../shared/api/client";
+import { sendFeatureForm } from "../../shared/api/featureBoundary";
 
 export function previewImportFile(formData: FormData): Promise<any> {
-  return apiPostForm<any>("/imports/preview", formData);
+  return sendFeatureForm<any>("/imports/preview", formData);
 }
 
 export function commitImportFile(formData: FormData): Promise<any> {
-  return apiPostForm<any>("/imports/commit", formData);
+  return sendFeatureForm<any>("/imports/commit", formData);
 }

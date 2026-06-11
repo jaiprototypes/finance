@@ -1,10 +1,8 @@
 import ast
 from pathlib import Path
 
-from backend.app.models import Account, Base
-from backend.app.features.ledger.models import Account as FeatureAccount
-from backend.app.schemas import InvoiceCreate
-from backend.app.features.receivables.schemas import InvoiceCreate as FeatureInvoiceCreate
+from backend.app.core.db_base import Base
+from backend.app.features import models as feature_models
 from backend.app.features.registry import registry
 from backend.app.main import app
 
@@ -41,6 +39,14 @@ FRONTEND_FEATURES = {
     "timesheets",
     "transactions",
 }
+SPLIT_FRONTEND_FEATURES = {
+    "budgets",
+    "business",
+    "reports",
+    "settings",
+    "timesheets",
+    "transactions",
+}
 
 
 def _python_files(root: Path):
@@ -51,9 +57,12 @@ def _feature_import_edges() -> dict[str, set[str]]:
     feature_root = ROOT / "backend" / "app" / "features"
     edges: dict[str, set[str]] = {}
     for path in feature_root.rglob("*.py"):
+        relative_parts = path.relative_to(feature_root).parts
+        if len(relative_parts) < 2:
+            continue
         if path.name in {"manifest.py", "registry.py"}:
             continue
-        origin = path.relative_to(feature_root).parts[0]
+        origin = relative_parts[0]
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
@@ -66,6 +75,48 @@ def _feature_import_edges() -> dict[str, set[str]]:
             if target and target != origin and (feature_root / target).is_dir():
                 edges.setdefault(origin, set()).add(target)
     return edges
+
+
+def _strongly_connected_components(edges: dict[str, set[str]]) -> list[list[str]]:
+    nodes = sorted({*edges, *(target for targets in edges.values() for target in targets)})
+    index = 0
+    stack: list[str] = []
+    on_stack: set[str] = set()
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    components: list[list[str]] = []
+
+    def visit(node: str) -> None:
+        nonlocal index
+        indices[node] = index
+        lowlinks[node] = index
+        index += 1
+        stack.append(node)
+        on_stack.add(node)
+
+        for target in edges.get(node, set()):
+            if target not in indices:
+                visit(target)
+                lowlinks[node] = min(lowlinks[node], lowlinks[target])
+            elif target in on_stack:
+                lowlinks[node] = min(lowlinks[node], indices[target])
+
+        if lowlinks[node] != indices[node]:
+            return
+
+        component: list[str] = []
+        while stack:
+            target = stack.pop()
+            on_stack.remove(target)
+            component.append(target)
+            if target == node:
+                break
+        components.append(sorted(component))
+
+    for node in nodes:
+        if node not in indices:
+            visit(node)
+    return components
 
 
 def test_feature_packages_have_standard_entrypoints():
@@ -87,15 +138,9 @@ def test_feature_registry_declares_backend_modules_and_routes():
         assert all(dependency in registry.keys for dependency in manifest.dependencies)
 
 
-def test_feature_import_graph_has_no_reciprocal_cycles():
-    edges = _feature_import_edges()
-    reciprocal_edges = sorted(
-        f"{origin} <-> {target}"
-        for origin, targets in edges.items()
-        for target in targets
-        if origin < target and origin in edges.get(target, set())
-    )
-    assert not reciprocal_edges
+def test_feature_import_graph_has_no_cycles():
+    cycles = [component for component in _strongly_connected_components(_feature_import_edges()) if len(component) > 1]
+    assert not cycles
 
 
 def test_versioned_api_and_stable_readiness_routes_are_registered():
@@ -104,6 +149,8 @@ def test_versioned_api_and_stable_readiness_routes_are_registered():
     assert "/diagnostics/status" in paths
     assert "/api/v1/transactions/details" in paths
     assert "/api/v1/receivables/reconcile" in paths
+    assert "/transactions/details" not in paths
+    assert "/receivables/reconcile" not in paths
 
 
 def test_feature_routers_do_not_import_legacy_api_modules():
@@ -116,16 +163,8 @@ def test_feature_routers_do_not_import_legacy_api_modules():
     assert not offenders
 
 
-def test_legacy_api_modules_are_shims_only():
-    api_root = ROOT / "backend" / "app" / "api"
-    offenders: list[str] = []
-    for path in api_root.glob("*.py"):
-        if path.name == "__init__.py":
-            continue
-        text = path.read_text(encoding="utf-8")
-        if "Compatibility shim" not in text or "import_module" not in text or len(text.splitlines()) > 10:
-            offenders.append(str(path.relative_to(ROOT)))
-    assert not offenders
+def test_legacy_api_modules_are_removed():
+    assert not (ROOT / "backend" / "app" / "api").exists()
 
 
 def test_app_composition_uses_feature_entrypoints():
@@ -146,16 +185,8 @@ def test_feature_code_does_not_import_legacy_services():
     assert not offenders
 
 
-def test_legacy_service_modules_are_shims_only():
-    services_root = ROOT / "backend" / "app" / "services"
-    offenders: list[str] = []
-    for path in services_root.glob("*.py"):
-        if path.name == "__init__.py":
-            continue
-        text = path.read_text(encoding="utf-8")
-        if "Compatibility shim" not in text or "import_module" not in text or len(text.splitlines()) > 10:
-            offenders.append(str(path.relative_to(ROOT)))
-    assert not offenders
+def test_legacy_service_modules_are_removed():
+    assert not (ROOT / "backend" / "app" / "services").exists()
 
 
 def test_models_and_schemas_are_feature_owned():
@@ -167,16 +198,13 @@ def test_models_and_schemas_are_feature_owned():
             offenders.append(str(path.relative_to(ROOT)))
     assert not offenders
 
-    assert Account is FeatureAccount
-    assert InvoiceCreate is FeatureInvoiceCreate
+    assert feature_models.Base is Base
     assert {"account", "transactions", "invoice", "app_setting"} <= set(Base.metadata.tables)
 
 
-def test_root_model_and_schema_modules_are_reexports_only():
+def test_root_model_and_schema_modules_are_removed():
     for relative_path in ["backend/app/models.py", "backend/app/schemas.py"]:
-        text = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert "class " not in text
-        assert "Compatibility re-export layer" in text
+        assert not (ROOT / relative_path).exists()
 
 
 def test_removed_budget_group_code_is_not_referenced_by_scripts_or_services():
@@ -206,10 +234,8 @@ def test_scripts_do_not_import_private_api_modules():
 def test_classification_owns_rule_routes():
     taxonomy_rules = ROOT / "backend" / "app" / "features" / "taxonomy" / "rules_router.py"
     classification_rules = ROOT / "backend" / "app" / "features" / "classification" / "rules_router.py"
-    legacy_rules = (ROOT / "backend" / "app" / "api" / "rules.py").read_text(encoding="utf-8")
     assert not taxonomy_rules.exists()
     assert classification_rules.exists()
-    assert "features.classification.rules_router" in legacy_rules
 
 
 def test_budgeting_owns_budget_projection_services():
@@ -284,4 +310,32 @@ def test_frontend_features_have_local_api_modules():
 
     for page in feature_root.rglob("*Page.tsx"):
         text = page.read_text(encoding="utf-8")
+        assert len(text.splitlines()) <= 450
         assert "../../shared/api/client" not in text
+        assert "apiGet" not in text
+        assert "apiPost" not in text
+        assert "apiDelete" not in text
+        assert "apiPostForm" not in text
+        assert "apiGetBlob" not in text
+
+    raw_api_markers = ("apiGet", "apiPost", "apiDelete", "apiPostForm", "apiGetBlob", "apiUrl")
+    for component in feature_root.rglob("*.tsx"):
+        text = component.read_text(encoding="utf-8")
+        assert "../../shared/api/client" not in text
+        assert not any(marker in text for marker in raw_api_markers)
+
+
+def test_large_frontend_features_are_split_into_components():
+    feature_root = ROOT / "apps" / "desktop" / "src" / "features"
+    for feature in SPLIT_FRONTEND_FEATURES:
+        feature_dir = feature_root / feature
+        components_dir = feature_dir / "components"
+        workspace = components_dir / f"{feature.title().replace(' ', '')}Workspace.tsx"
+        view = components_dir / f"{feature.title().replace(' ', '')}View.tsx"
+        if feature == "transactions":
+            workspace = components_dir / "TransactionsWorkspace.tsx"
+            view = components_dir / "TransactionsView.tsx"
+        assert components_dir.exists()
+        assert workspace.exists()
+        assert view.exists()
+        assert len((feature_dir / f"{feature.title().replace(' ', '')}Page.tsx").read_text(encoding="utf-8").splitlines()) <= 80

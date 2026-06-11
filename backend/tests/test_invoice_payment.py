@@ -4,18 +4,8 @@ from fastapi import HTTPException
 from pypdf import PdfReader
 from sqlalchemy import select
 
-from backend.app.models import (
-    Account,
-    Category,
-    Client,
-    Invoice,
-    InvoiceLineItem,
-    InvoicePaymentLink,
-    Project,
-    Transaction,
-    TransactionSplit,
-)
-from backend.app.api.business import (
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.receivables.business_router import (
     apply_payment_route,
     create_invoice_route,
     delete_client as delete_client_route,
@@ -26,10 +16,13 @@ from backend.app.api.business import (
     update_invoice_route,
     update_invoice_status as update_invoice_status_route,
 )
-from backend.app.schemas import InvoiceCreate, InvoicePaymentApply, InvoiceSendRequest
-from backend.app.services.settings import set_setting
-from backend.app.services.invoice_tracking import auto_track_invoices, serialize_invoice
-from backend.app.services.invoices import apply_payment
+from backend.app.features.receivables.invoice_tracking import auto_track_invoices, serialize_invoice
+from backend.app.features.receivables.invoices import apply_payment
+from backend.app.features.receivables.models import Client, Invoice, InvoiceLineItem, InvoicePaymentLink
+from backend.app.features.receivables.schemas import InvoiceCreate, InvoicePaymentApply, InvoiceSendRequest
+from backend.app.features.settings.service import set_setting
+from backend.app.features.taxonomy.models import Category
+from backend.app.features.timesheets.models import Project
 from backend.tests.utils import make_session
 
 
@@ -988,7 +981,7 @@ def test_send_invoice_route_marks_invoice_sent(monkeypatch):
         sent["recipient_email"] = recipient_email or client_arg.email
         sent["pdf_prefix"] = pdf_bytes[:4]
 
-    monkeypatch.setattr("backend.app.api.business.send_invoice_email", fake_send)
+    monkeypatch.setattr("backend.app.features.receivables.business_router.send_invoice_email", fake_send)
 
     result = send_invoice_route(invoice.id, session=session)
 
@@ -1038,7 +1031,7 @@ def test_send_invoice_route_accepts_explicit_recipient_when_client_email_missing
         sent["recipient_email"] = recipient_email
         sent["pdf_prefix"] = pdf_bytes[:4]
 
-    monkeypatch.setattr("backend.app.api.business.send_invoice_email", fake_send)
+    monkeypatch.setattr("backend.app.features.receivables.business_router.send_invoice_email", fake_send)
 
     result = send_invoice_route(
         invoice.id,

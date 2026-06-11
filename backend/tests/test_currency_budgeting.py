@@ -4,30 +4,22 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from backend.app.api import budgets as budgets_api
-from backend.app.api import settings as settings_api
-from backend.app.models import (
-    Account,
-    BudgetBucketTarget,
-    BudgetCategoryTarget,
-    BudgetMonth,
-    Category,
-    FXRate,
-    PlaidAccount,
-    PlaidItem,
-    Subcategory,
-    Transaction,
-    TransactionSplit,
-    UpAccount,
-)
-from backend.app.schemas import BudgetBucketTargetCreate, SettingsUpdate
-from backend.app.services import reports
-from backend.app.services.currency import (
+from backend.app.features.budgeting import router as budgets_api
+from backend.app.features.budgeting.models import BudgetBucketTarget, BudgetCategoryTarget, BudgetMonth
+from backend.app.features.budgeting.schemas import BudgetBucketTargetCreate
+from backend.app.features.connectors.models import PlaidAccount, PlaidItem, UpAccount
+from backend.app.features.fx.currency import (
     FX_STALE_DAYS,
     get_aud_per_usd_for_date,
     get_recent_fortnightly_average_aud_per_usd,
 )
-from backend.app.services.settings import get_setting
+from backend.app.features.fx.models import FXRate
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.reports import service as reports
+from backend.app.features.settings import router as settings_api
+from backend.app.features.settings.schemas import SettingsUpdate
+from backend.app.features.settings.service import get_setting
+from backend.app.features.taxonomy.models import Category, Subcategory
 from backend.tests.utils import make_session
 
 

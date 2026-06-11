@@ -1,5 +1,5 @@
-from backend.app.models import Account
-from backend.app.services.imports import create_import_batch, import_csv
+from backend.app.features.imports.service import create_import_batch, import_csv
+from backend.app.features.ledger.models import Account
 from backend.tests.utils import make_session
 
 
@@ -29,4 +29,3 @@ def test_import_idempotent():
 
     assert result1["imported"] == 1
     assert result2["duplicates"] == 1
-

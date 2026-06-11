@@ -1,17 +1,7 @@
-export {
-  API_BASE,
-  apiDelete,
-  apiGet,
-  apiGetBlob,
-  apiPost,
-  apiPostForm,
-  apiUrl,
-  downloadDiagnostics,
-  saveBlob
-} from "../../shared/api/client";
+export * from "../../shared/api/featureBoundary";
 
-import { apiPostForm } from "../../shared/api/client";
+import { sendFeatureForm } from "../../shared/api/featureBoundary";
 
 export function uploadTransactionAttachment(transactionId: number, formData: FormData): Promise<any> {
-  return apiPostForm<any>(`/transactions/${transactionId}/attachments`, formData);
+  return sendFeatureForm<any>(`/transactions/${transactionId}/attachments`, formData);
 }

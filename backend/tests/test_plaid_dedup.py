@@ -2,17 +2,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from backend.app.models import (
-    Account,
-    ClassificationAudit,
-    PlaidAccount,
-    PlaidItem,
-    PlaidTransaction,
-    Transaction,
-    TransactionMemory,
-    TransactionSplit,
-)
-from backend.app.services import plaid_client
+from backend.app.features.classification.models import ClassificationAudit, TransactionMemory
+from backend.app.features.connectors import plaid_client
+from backend.app.features.connectors.models import PlaidAccount, PlaidItem, PlaidTransaction
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
 from backend.tests.utils import make_session
 
 

@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, downloadDiagnostics, saveBlob } from "./api";
+import { getFeatureData, sendFeatureCommand } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -64,7 +64,7 @@ export function FXOptimizer() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
 
   useEffect(() => {
-    apiGet<any>("/fx/settings")
+    getFeatureData<any>("/fx/settings")
       .then((data) =>
         setSettings({
           target_account_id: data.target_account_id ? String(data.target_account_id) : "",
@@ -73,17 +73,17 @@ export function FXOptimizer() {
         })
       )
       .catch(() => undefined);
-    apiGet<any[]>("/fx/rates").then((data) => setRates(data.slice(-10))).catch(() => undefined);
-    apiGet<any[]>("/fx/recommendations").then(setRecommendations).catch(() => undefined);
+    getFeatureData<any[]>("/fx/rates").then((data) => setRates(data.slice(-10))).catch(() => undefined);
+    getFeatureData<any[]>("/fx/recommendations").then(setRecommendations).catch(() => undefined);
   }, []);
 
   const ingest = async () => {
-    await apiPost("/fx/rates/ingest");
-    apiGet<any[]>("/fx/rates").then((data) => setRates(data.slice(-10))).catch(() => undefined);
+    await sendFeatureCommand("/fx/rates/ingest");
+    getFeatureData<any[]>("/fx/rates").then((data) => setRates(data.slice(-10))).catch(() => undefined);
   };
 
   const run = async () => {
-    const data = await apiPost("/fx/recommendations", {
+    const data = await sendFeatureCommand("/fx/recommendations", {
       ...form,
       aud_cash: Number(form.aud_cash),
       usd_cash: Number(form.usd_cash),
@@ -93,11 +93,11 @@ export function FXOptimizer() {
       usd_debt_apr: Number(form.usd_debt_apr)
     });
     setResult(data);
-    apiGet<any[]>("/fx/recommendations").then(setRecommendations).catch(() => undefined);
+    getFeatureData<any[]>("/fx/recommendations").then(setRecommendations).catch(() => undefined);
   };
 
   const saveSettings = async () => {
-    await apiPost("/fx/settings", {
+    await sendFeatureCommand("/fx/settings", {
       target_account_id: settings.target_account_id ? Number(settings.target_account_id) : null,
       provider: settings.provider,
       risk_profile: settings.risk_profile

@@ -1,5 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
-import { API_BASE, apiDelete, apiGet, apiGetBlob, apiPost, apiPostForm, apiUrl, downloadDiagnostics, saveBlob } from "./api";
+import { getFeatureData, downloadFeatureDiagnostics } from "./api";
 import {
   BoxTitle,
   CollapsibleSection,
@@ -49,11 +49,11 @@ export function Diagnostics() {
   const [info, setInfo] = useState<any | null>(null);
 
   useEffect(() => {
-    apiGet<any>("/diagnostics/status").then(setInfo).catch(() => undefined);
+    getFeatureData<any>("/diagnostics/status").then(setInfo).catch(() => undefined);
   }, []);
 
   const exportLogs = async () => {
-    await downloadDiagnostics();
+    await downloadFeatureDiagnostics();
     setStatus("Diagnostics exported");
   };
 

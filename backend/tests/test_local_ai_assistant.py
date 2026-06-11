@@ -1,9 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
-from backend.app.models import Account, Client, DebtProfile, FXRate, Invoice, Project, TimeEntry, Transaction
-from backend.app.services import assistant
-from backend.app.services.local_ai import LocalAIUnavailableError
-from backend.app.services.settings import set_setting
+from backend.app.features.assistant import service as assistant
+from backend.app.features.assistant.local_ai import LocalAIUnavailableError
+from backend.app.features.debts.models import DebtProfile
+from backend.app.features.fx.models import FXRate
+from backend.app.features.ledger.models import Account, Transaction
+from backend.app.features.receivables.models import Client, Invoice
+from backend.app.features.settings.service import set_setting
+from backend.app.features.timesheets.models import Project, TimeEntry
 from backend.tests.utils import make_session
 
 

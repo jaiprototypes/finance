@@ -70,14 +70,6 @@ class FeatureRegistry:
             if route.stable_root
         )
 
-    def compatibility_root_routers(self) -> tuple[APIRouter, ...]:
-        return tuple(
-            route.router
-            for manifest in self._manifests
-            for route in manifest.routes
-            if route.compatibility_root and not route.stable_root
-        )
-
     def _validate_keys(self) -> None:
         if len(self._by_key) != len(self._manifests):
             raise ValueError("Feature manifests must use unique keys")
@@ -93,4 +85,3 @@ class FeatureRegistry:
 
 
 registry = FeatureRegistry(FEATURE_MANIFESTS)
-

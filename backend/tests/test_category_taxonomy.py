@@ -1,11 +1,13 @@
 from sqlalchemy import select
 
-from backend.app.api import transactions as transactions_api
-from backend.app.api import categories as categories_api
-from backend.app.models import Account, Category, Transaction, TransactionSplit
-from backend.app.schemas import TransactionSplitCreate
-from backend.app.services import budget_buckets, classification
-from backend.app.services.settings import set_setting
+from backend.app.features.classification import service as classification
+from backend.app.features.ledger import transactions_router as transactions_api
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.ledger.schemas import TransactionSplitCreate
+from backend.app.features.settings.service import set_setting
+from backend.app.features.taxonomy import categories_router as categories_api
+from backend.app.features.taxonomy import service as budget_buckets
+from backend.app.features.taxonomy.models import Category
 from backend.tests.utils import make_session
 
 

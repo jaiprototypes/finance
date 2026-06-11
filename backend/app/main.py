@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db, session_scope
 from .logging import setup_logging
-from .features.router import COMPATIBILITY_ROOT_ROUTERS, FEATURE_ROUTERS, STABLE_ROOT_ROUTERS
+from .features.router import FEATURE_ROUTERS, STABLE_ROOT_ROUTERS
 from .features.settings.service import validate_llm_configuration
 
 TAURI_ALLOWED_ORIGINS = [
@@ -40,7 +40,3 @@ for feature_router in FEATURE_ROUTERS:
 
 for stable_router in STABLE_ROOT_ROUTERS:
     app.include_router(stable_router)
-
-# Temporary compatibility while scripts/tests migrate to /api/v1.
-for feature_router in COMPATIBILITY_ROOT_ROUTERS:
-    app.include_router(feature_router)
