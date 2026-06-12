@@ -6,6 +6,7 @@ export function BusinessToolsSection({ model }: { model: any }) {
     formatCurrency,
     formatSignedCurrency,
     toDateValue,
+    companyLogoSrc,
     clients,
     invoices,
     editingClientId,

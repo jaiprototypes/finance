@@ -3,6 +3,8 @@ export function BusinessSummarySection({ model }: { model: any }) {
     BoxTitle,
     formatCount,
     formatCurrency,
+    companyLogoSrc,
+    usingCustomLogo,
     clients,
     invoices,
     activeClients,
