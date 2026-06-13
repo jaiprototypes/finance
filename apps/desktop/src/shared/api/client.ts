@@ -4,10 +4,30 @@ const STABLE_ROOT_PATHS = new Set(["/health", "/diagnostics/status", "/diagnosti
 
 export const API_BASE = (import.meta as any).env?.VITE_BACKEND_URL || DEFAULT_BASE;
 
+function normalizePath(path: string): string {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+function versionedPath(path: string): string {
+  const normalized = normalizePath(path);
+  return STABLE_ROOT_PATHS.has(normalized) ? normalized : `${API_VERSION_PREFIX}${normalized}`;
+}
+
+function candidateUrls(path: string): string[] {
+  const normalized = normalizePath(path);
+  const primary = `${API_BASE}${versionedPath(normalized)}`;
+
+  if (STABLE_ROOT_PATHS.has(normalized)) {
+    return [primary, `${API_BASE}${API_VERSION_PREFIX}${normalized}`];
+  }
+
+  // Keeps the desktop usable if a stale local backend is still serving pre-v1 routes.
+  return [primary, `${API_BASE}${normalized}`];
+}
+
 export function apiUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  const versioned = STABLE_ROOT_PATHS.has(normalized) ? normalized : `${API_VERSION_PREFIX}${normalized}`;
-  return `${API_BASE}${versioned}`;
+  return `${API_BASE}${versionedPath(normalized)}`;
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
@@ -30,8 +50,23 @@ async function readErrorMessage(res: Response): Promise<string> {
   }
 }
 
+async function fetchWithRouteFallback(path: string, init?: RequestInit): Promise<Response> {
+  const urls = candidateUrls(path);
+  let lastResponse: Response | null = null;
+
+  for (const url of urls) {
+    const response = await fetch(url, init);
+    lastResponse = response;
+    if (response.status !== 404) {
+      return response;
+    }
+  }
+
+  return lastResponse as Response;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(apiUrl(path));
+  const res = await fetchWithRouteFallback(path);
   if (!res.ok) {
     const message = await readErrorMessage(res);
     throw new Error(`GET ${path} failed: ${message}`);
@@ -40,7 +75,7 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body?: any): Promise<T> {
-  const res = await fetch(apiUrl(path), {
+  const res = await fetchWithRouteFallback(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined
@@ -53,7 +88,7 @@ export async function apiPost<T>(path: string, body?: any): Promise<T> {
 }
 
 export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
-  const res = await fetch(apiUrl(path), {
+  const res = await fetchWithRouteFallback(path, {
     method: "POST",
     body
   });
@@ -65,7 +100,7 @@ export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await fetch(apiUrl(path), { method: "DELETE" });
+  const res = await fetchWithRouteFallback(path, { method: "DELETE" });
   if (!res.ok) {
     const message = await readErrorMessage(res);
     throw new Error(`DELETE ${path} failed: ${message}`);
@@ -74,7 +109,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
 }
 
 export async function apiGetBlob(path: string): Promise<Blob> {
-  const res = await fetch(apiUrl(path), { cache: "no-store" });
+  const res = await fetchWithRouteFallback(path, { cache: "no-store" });
   if (!res.ok) {
     const message = await readErrorMessage(res);
     throw new Error(`GET ${path} failed: ${message}`);

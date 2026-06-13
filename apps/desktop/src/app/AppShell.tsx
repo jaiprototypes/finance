@@ -97,7 +97,7 @@ export default function AppShell() {
     setActiveWorkspace(bucket.id);
     setWorkspaceView((current) => ({
       ...current,
-      [bucket.id]: resolveBucketPageId(bucket, current)
+      [bucket.id]: bucket.defaultPage
     }));
   };
 
