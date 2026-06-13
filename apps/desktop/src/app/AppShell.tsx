@@ -84,8 +84,22 @@ export default function AppShell() {
   const logoSrc = usingCustomLogo ? customLogoSrc : defaultLogo;
   const pageById = new Map(pages.map((page) => [page.id, page]));
   const activeBucket = navBuckets.find((bucket) => bucket.id === activeWorkspace) || navBuckets[0];
-  const activePageId = workspaceView[activeBucket.id] || activeBucket.pages[0];
-  const activePage = pageById.get(activePageId) || pages[0];
+  const resolveBucketPageId = (bucket: typeof activeBucket, view: Record<string, string>) => {
+    const storedPageId = view[bucket.id];
+    return bucket.pages.includes(storedPageId) ? storedPageId : bucket.defaultPage;
+  };
+  const activePageId = resolveBucketPageId(activeBucket, workspaceView);
+  const activePage = pageById.get(activePageId) || pageById.get(activeBucket.defaultPage) || pages[0];
+
+  const openWorkspace = (workspaceId: string) => {
+    const bucket = navBuckets.find((item) => item.id === workspaceId);
+    if (!bucket) return;
+    setActiveWorkspace(bucket.id);
+    setWorkspaceView((current) => ({
+      ...current,
+      [bucket.id]: resolveBucketPageId(bucket, current)
+    }));
+  };
 
   const navigateToPage = (pageId: string) => {
     const bucket = navBuckets.find((item) => item.pages.includes(pageId));
@@ -155,7 +169,7 @@ export default function AppShell() {
             <button
               key={bucket.id}
               className={activeWorkspace === bucket.id ? "nav-workspace active" : "nav-workspace"}
-              onClick={() => setActiveWorkspace(bucket.id)}
+              onClick={() => openWorkspace(bucket.id)}
             >
               <span className="nav-workspace-label">{bucket.label}</span>
               <span className="nav-workspace-meta">{bucket.summary}</span>

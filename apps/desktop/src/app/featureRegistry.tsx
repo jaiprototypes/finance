@@ -13,7 +13,7 @@ import { Timesheets } from "../features/timesheets/TimesheetsPage";
 import { Transactions } from "../features/transactions/TransactionsPage";
 
 export type PageDefinition = { id: string; label: string; meta: string };
-export type NavBucket = { id: string; label: string; summary: string; pages: string[] };
+export type NavBucket = { id: string; label: string; summary: string; pages: string[]; defaultPage: string };
 
 type WorkspaceDefinition = NavBucket & { defaultPage: string };
 
@@ -185,6 +185,7 @@ export const navBuckets: NavBucket[] = workspaces.map((workspace) => ({
   id: workspace.id,
   label: workspace.label,
   summary: workspace.summary,
+  defaultPage: workspace.defaultPage,
   pages: featureManifests.filter((feature) => feature.workspace === workspace.id).map((feature) => feature.id)
 }));
 export const defaultWorkspaceView = Object.fromEntries(
@@ -200,4 +201,3 @@ export function renderFeaturePage(pageId: string, context: FeatureRenderContext)
   const feature = featureById.get(pageId) || featureManifests[0];
   return feature.render(context);
 }
-
