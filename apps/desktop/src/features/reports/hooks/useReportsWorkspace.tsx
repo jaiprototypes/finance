@@ -17,6 +17,7 @@ import {
   clearPendingPlaidLinkSession,
   currentMonthLabel,
   formatAmount,
+  formatCalendarDate,
   formatCompactCurrency,
   formatCount,
   formatCurrency,

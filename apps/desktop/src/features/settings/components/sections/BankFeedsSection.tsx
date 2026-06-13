@@ -113,7 +113,7 @@ export function BankFeedsSection({ model }: { model: any }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {plaidItems.map((item) => (
+                  {plaidItems.map((item: any) => (
                     <tr key={item.item_id}>
                       <td>{item.institution_name || item.item_id}</td>
                       <td>{item.status === "login_required" ? "login required" : item.status}</td>
@@ -151,7 +151,7 @@ export function BankFeedsSection({ model }: { model: any }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {plaidAccounts.map((account) => (
+                  {plaidAccounts.map((account: any) => (
                     <tr key={account.plaid_account_id}>
                       <td>{account.name}</td>
                       <td>{account.mask}</td>
@@ -193,7 +193,7 @@ export function BankFeedsSection({ model }: { model: any }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {upAccounts.map((account) => (
+                  {upAccounts.map((account: any) => (
                     <tr key={account.up_account_id}>
                       <td>{account.name || account.up_account_id}</td>
                       <td>{account.account_type || ""}</td>
@@ -218,7 +218,7 @@ export function BankFeedsSection({ model }: { model: any }) {
               </tr>
             </thead>
             <tbody>
-              {connectors.map((connector) => (
+              {connectors.map((connector: any) => (
                 <tr key={connector.name}>
                   <td>{connector.name}</td>
                   <td>{connector.enabled ? "Yes" : "No"}</td>

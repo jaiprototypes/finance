@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { getFeatureData, sendFeatureCommand } from "../api";
+import defaultLogo from "../../../assets/logo.png";
 import {
   BoxTitle,
   CollapsibleSection,

@@ -27,7 +27,7 @@ export function BackupSettingsSection({ model }: { model: any }) {
               </tr>
             </thead>
             <tbody>
-              {backups.map((backup) => (
+              {backups.map((backup: any) => (
                 <tr key={backup.name}>
                   <td>{backup.name}</td>
                   <td>{formatFileSize(backup.size)}</td>

@@ -42,7 +42,7 @@ export function LiveInvoicesSection({ model }: { model: any }) {
           {settledInvoices.length > 0 && (
             <button
               className="button-ghost button-small"
-              onClick={() => setShowSettledInvoices((current) => !current)}
+              onClick={() => setShowSettledInvoices((current: boolean) => !current)}
               type="button"
             >
               {showSettledInvoices ? "Hide settled" : `Show settled (${settledInvoices.length})`}
@@ -70,8 +70,8 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                 </td>
               </tr>
             )}
-            {displayedInvoices.map((invoice) => {
-              const client = clients.find((c) => c.id === invoice.client_id);
+            {displayedInvoices.map((invoice: any) => {
+              const client = clients.find((c: any) => c.id === invoice.client_id);
               const amountValue = paymentAmounts[invoice.id] ?? String(invoice.total);
               const isExpanded = expandedInvoiceId === invoice.id;
               const balanceDue = Number(invoice.balance_due ?? invoice.total ?? 0);
@@ -114,7 +114,7 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                                 placeholder="Recipient email"
                                 value={invoiceRecipientEmails[invoice.id] ?? String(client?.email || "")}
                                 onChange={(e) =>
-                                  setInvoiceRecipientEmails((prev) => ({ ...prev, [invoice.id]: e.target.value }))
+                                  setInvoiceRecipientEmails((prev: Record<number, string>) => ({ ...prev, [invoice.id]: e.target.value }))
                                 }
                               />
                             </div>
@@ -190,7 +190,7 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                                 placeholder="Amount"
                                 value={amountValue}
                                 onChange={(e) =>
-                                  setPaymentAmounts((prev) => ({ ...prev, [invoice.id]: e.target.value }))
+                                  setPaymentAmounts((prev: Record<number, string>) => ({ ...prev, [invoice.id]: e.target.value }))
                                 }
                               />
                               <select
@@ -199,7 +199,7 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                                 value=""
                               >
                                 <option value="">Apply payment</option>
-                                {incomingTransactions.map((txn) => (
+                                {incomingTransactions.map((txn: any) => (
                                   <option key={txn.id} value={txn.id}>
                                     {txn.date} {txn.account_name ? `${txn.account_name} · ` : ""}
                                     {txn.description} {formatCurrency(txn.amount, txn.currency)}

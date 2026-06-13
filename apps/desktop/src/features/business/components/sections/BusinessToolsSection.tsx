@@ -101,7 +101,7 @@ export function BusinessToolsSection({ model }: { model: any }) {
                       onChange={(e) => setInvoiceForm({ ...invoiceForm, client_id: e.target.value })}
                     >
                       <option value="">Select client</option>
-                      {activeClients.map((client) => (
+                      {activeClients.map((client: any) => (
                         <option key={client.id} value={client.id}>
                           {client.name}
                         </option>
@@ -178,7 +178,7 @@ export function BusinessToolsSection({ model }: { model: any }) {
                         Add line item
                       </button>
                     </div>
-                    {lineItems.map((item, idx) => (
+                    {lineItems.map((item: any, idx: number) => (
                       <div className="invoice-line-item-row" key={`line-${idx}`}>
                         <input
                           className="invoice-line-item-description"
@@ -316,7 +316,7 @@ export function BusinessToolsSection({ model }: { model: any }) {
                   }
                 >
                   <option value="">Use PDF or new client</option>
-                  {activeClients.map((client) => (
+                  {activeClients.map((client: any) => (
                     <option key={client.id} value={client.id}>
                       {client.name}
                     </option>

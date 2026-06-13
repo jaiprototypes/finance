@@ -136,7 +136,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
               onChange={(e) => setRuleForm({ ...ruleForm, category_id: e.target.value })}
             >
               <option value="">Category</option>
-              {categories.map((cat) => (
+              {categories.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
@@ -165,8 +165,8 @@ export function AutomationRulesSection({ model }: { model: any }) {
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule) => {
-                const category = categories.find((cat) => cat.id === rule.category_id);
+              {rules.map((rule: any) => {
+                const category = categories.find((cat: any) => cat.id === rule.category_id);
                 return (
                   <tr key={rule.id}>
                     <td>{rule.name}</td>
@@ -224,7 +224,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
               </tr>
             </thead>
             <tbody>
-              {knowledge.map((entry) => (
+              {knowledge.map((entry: any) => (
                 <tr key={entry.id}>
                   <td>{entry.title}</td>
                   <td>{entry.tags || ""}</td>
@@ -256,7 +256,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
             onChange={(e) => setMerchantForm({ ...merchantForm, default_category_id: e.target.value })}
           >
             <option value="">Category</option>
-            {categories.map((cat) => (
+            {categories.map((cat: any) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}
               </option>
@@ -294,7 +294,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
           <div className="row">
             <button
               className="button-ghost button-small"
-              onClick={() => setMerchantPage((page) => Math.max(1, page - 1))}
+              onClick={() => setMerchantPage((page: number) => Math.max(1, page - 1))}
               disabled={merchantPage <= 1}
             >
               Prev
@@ -304,7 +304,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
             </span>
             <button
               className="button-ghost button-small"
-              onClick={() => setMerchantPage((page) => Math.min(merchantTotalPages, page + 1))}
+              onClick={() => setMerchantPage((page: number) => Math.min(merchantTotalPages, page + 1))}
               disabled={merchantPage >= merchantTotalPages}
             >
               Next
@@ -323,12 +323,12 @@ export function AutomationRulesSection({ model }: { model: any }) {
             </tr>
           </thead>
           <tbody>
-            {pagedMerchants.map((merchant) => (
+            {pagedMerchants.map((merchant: any) => (
               <Fragment key={`merchant-${merchant.id}`}>
                 <tr>
                   <td>{merchant.name}</td>
                   <td>{merchant.currency || ""}</td>
-                  <td>{categories.find((cat) => cat.id === merchant.default_category_id)?.name || ""}</td>
+                  <td>{categories.find((cat: any) => cat.id === merchant.default_category_id)?.name || ""}</td>
                   <td>{merchant.default_classification}</td>
                   <td>{merchant.notes || ""}</td>
                   <td>
@@ -363,7 +363,7 @@ export function AutomationRulesSection({ model }: { model: any }) {
                           }
                         >
                           <option value="">Category</option>
-                          {categories.map((cat) => (
+                          {categories.map((cat: any) => (
                             <option key={cat.id} value={cat.id}>
                               {cat.name}
                             </option>

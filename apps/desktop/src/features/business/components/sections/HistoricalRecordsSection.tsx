@@ -61,7 +61,7 @@ export function HistoricalRecordsSection({ model }: { model: any }) {
               {filteredArchivedInvoices.length === 0 && (
                 <div className="archive-empty">No historical invoices match the current filter.</div>
               )}
-              {filteredArchivedInvoices.map((archive) => {
+              {filteredArchivedInvoices.map((archive: any) => {
                 const client = clientById.get(archive.client_id);
                 const isActive = archive.id === selectedArchiveId;
                 const archiveStatusLabel = archive.is_overdue ? "overdue" : (archive.status || "archived");
@@ -181,7 +181,7 @@ export function HistoricalRecordsSection({ model }: { model: any }) {
                         onChange={(e) => setArchiveEditForm({ ...archiveEditForm, client_id: e.target.value })}
                       >
                         <option value="">Select client</option>
-                        {visibleClients.map((client) => (
+                        {visibleClients.map((client: any) => (
                           <option key={client.id} value={client.id}>
                             {client.name}
                           </option>
@@ -311,7 +311,7 @@ export function HistoricalRecordsSection({ model }: { model: any }) {
                               placeholder="Amount"
                               value={archivePaymentAmounts[candidate.id] ?? ""}
                               onChange={(e) =>
-                                setArchivePaymentAmounts((prev) => ({ ...prev, [candidate.id]: e.target.value }))
+                                setArchivePaymentAmounts((prev: Record<number, string>) => ({ ...prev, [candidate.id]: e.target.value }))
                               }
                             />
                             <button className="button-small" onClick={() => applyArchivePayment(candidate.id)}>

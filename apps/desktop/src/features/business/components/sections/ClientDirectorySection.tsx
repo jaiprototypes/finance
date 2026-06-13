@@ -42,7 +42,7 @@ export function ClientDirectorySection({ model }: { model: any }) {
                 <td colSpan={4}>No active clients yet.</td>
               </tr>
             )}
-            {activeClients.map((client) => {
+            {activeClients.map((client: any) => {
               const isExpanded = expandedClientId === client.id;
               const liveCount = clientCurrentCounts[client.id] || 0;
               const archivedCount = clientArchivedCounts[client.id] || 0;
@@ -156,7 +156,7 @@ export function ClientDirectorySection({ model }: { model: any }) {
                 </tr>
               </thead>
               <tbody>
-                {archivedClients.map((client) => (
+                {archivedClients.map((client: any) => (
                   <tr key={`arch-${client.id}`}>
                     <td>{client.name}</td>
                     <td>{client.email || ""}</td>

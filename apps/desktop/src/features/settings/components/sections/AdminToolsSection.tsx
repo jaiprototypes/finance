@@ -81,7 +81,7 @@ export function AdminToolsSection({ model }: { model: any }) {
               </tr>
             </thead>
             <tbody>
-              {categories.map((cat) => (
+              {categories.map((cat: any) => (
                 <tr key={cat.id}>
                   <td>{cat.name}</td>
                   <td>{cat.personal_allowed ? "Yes" : "No"}</td>

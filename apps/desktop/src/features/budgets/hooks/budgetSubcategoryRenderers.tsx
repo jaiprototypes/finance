@@ -1,4 +1,4 @@
-import type { Dispatch, MouseEvent, SetStateAction } from "react";
+import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from "react";
 
 type StringMap = Record<string, string>;
 
@@ -34,7 +34,7 @@ export function createBudgetSubcategoryRenderers({
   matrixSubcategoryDrafts: StringMap;
   matrixSubcategoryRenameValues: StringMap;
   openMatrixDrilldown: (event: MouseEvent, row: any, month: string, options?: { subcategory?: any }) => void;
-  renderMatrixMoney: (amount: number, currency?: string) => string;
+  renderMatrixMoney: (amount: number, currency?: string) => ReactNode;
   saveMatrixSubcategoryRename: (row: any, subcategory: any) => void;
   setAddingMatrixSubcategoryFor: Dispatch<SetStateAction<string | null>>;
   setEditingMatrixSubcategoryId: Dispatch<SetStateAction<string | null>>;
