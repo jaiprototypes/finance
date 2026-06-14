@@ -20,6 +20,7 @@ BACKEND_FEATURES = {
     "settings",
     "assistant",
     "fx",
+    "planning",
     "debts",
     "timesheets",
     "diagnostics",
@@ -158,6 +159,8 @@ def test_versioned_api_and_stable_readiness_routes_are_registered():
     assert "/diagnostics/status" in paths
     assert "/api/v1/transactions/details" in paths
     assert "/api/v1/receivables/reconcile" in paths
+    assert "/api/v1/planning" in paths
+    assert "/api/v1/planning/overview" in paths
     assert "/transactions/details" not in paths
     assert "/receivables/reconcile" not in paths
 

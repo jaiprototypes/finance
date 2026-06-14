@@ -13,6 +13,7 @@ from .fx.manifest import manifest as fx
 from .imports.manifest import manifest as imports
 from .ledger.manifest import manifest as ledger
 from .manifest import FeatureManifest
+from .planning.manifest import manifest as planning
 from .receivables.manifest import manifest as receivables
 from .reports.manifest import manifest as reports
 from .settings.manifest import manifest as settings
@@ -27,6 +28,7 @@ FEATURE_MANIFESTS = (
     budgeting,
     debts,
     fx,
+    planning,
     receivables,
     timesheets,
     imports,

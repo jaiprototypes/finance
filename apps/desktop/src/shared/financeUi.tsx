@@ -728,20 +728,14 @@ export function PlanningWorkspaceOverview({
   useEffect(() => {
     let cancelled = false;
     const currentYear = new Date().getFullYear();
-    Promise.all([
-      apiGet<any>(`/reports/budget-matrix?year=${currentYear}`),
-      apiGet<any>("/reports/net-worth"),
-      apiGet<any[]>("/debts/profiles"),
-      apiGet<any[]>("/fx/rates"),
-      apiGet<any[]>("/fx/recommendations")
-    ])
-      .then(([budgetData, netWorthData, profileData, rateData, recommendationData]) => {
+    apiGet<any>(`/planning?year=${currentYear}`)
+      .then((data) => {
         if (cancelled) return;
-        setBudgetMatrix(budgetData);
-        setNetWorth(netWorthData);
-        setProfiles(profileData);
-        setRates(rateData);
-        setRecommendations(recommendationData);
+        setBudgetMatrix(data.budget_matrix);
+        setNetWorth(data.net_worth);
+        setProfiles(data.debt_profiles || []);
+        setRates(data.fx_rates || []);
+        setRecommendations(data.fx_recommendations || []);
       })
       .catch(() => undefined);
     return () => {
