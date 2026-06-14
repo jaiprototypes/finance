@@ -161,6 +161,7 @@ def test_versioned_api_and_stable_readiness_routes_are_registered():
     assert "/api/v1/receivables/reconcile" in paths
     assert "/api/v1/planning" in paths
     assert "/api/v1/planning/overview" in paths
+    assert "/planning" in paths
     assert "/transactions/details" not in paths
     assert "/receivables/reconcile" not in paths
 

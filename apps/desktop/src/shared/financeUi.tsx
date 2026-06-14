@@ -728,14 +728,42 @@ export function PlanningWorkspaceOverview({
   useEffect(() => {
     let cancelled = false;
     const currentYear = new Date().getFullYear();
-    apiGet<any>(`/planning?year=${currentYear}`)
+    const loadPlanning = async () => {
+      try {
+        const data = await apiGet<any>(`/planning?year=${currentYear}`);
+        return {
+          budgetMatrix: data.budget_matrix,
+          netWorth: data.net_worth,
+          profiles: data.debt_profiles || [],
+          rates: data.fx_rates || [],
+          recommendations: data.fx_recommendations || []
+        };
+      } catch {
+        const [budgetData, netWorthData, profileData, rateData, recommendationData] = await Promise.all([
+          apiGet<any>(`/reports/budget-matrix?year=${currentYear}`),
+          apiGet<any>("/reports/net-worth"),
+          apiGet<any[]>("/debts/profiles"),
+          apiGet<any[]>("/fx/rates"),
+          apiGet<any[]>("/fx/recommendations")
+        ]);
+        return {
+          budgetMatrix: budgetData,
+          netWorth: netWorthData,
+          profiles: profileData,
+          rates: rateData,
+          recommendations: recommendationData
+        };
+      }
+    };
+
+    loadPlanning()
       .then((data) => {
         if (cancelled) return;
-        setBudgetMatrix(data.budget_matrix);
-        setNetWorth(data.net_worth);
-        setProfiles(data.debt_profiles || []);
-        setRates(data.fx_rates || []);
-        setRecommendations(data.fx_recommendations || []);
+        setBudgetMatrix(data.budgetMatrix);
+        setNetWorth(data.netWorth);
+        setProfiles(data.profiles);
+        setRates(data.rates);
+        setRecommendations(data.recommendations);
       })
       .catch(() => undefined);
     return () => {
