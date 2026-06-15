@@ -11,6 +11,12 @@ import { Reports } from "../features/reports/ReportsPage";
 import { Settings } from "../features/settings/SettingsPage";
 import { Timesheets } from "../features/timesheets/TimesheetsPage";
 import { Transactions } from "../features/transactions/TransactionsPage";
+import { PlanningWorkspaceOverview } from "../features/planning/components/PlanningWorkspaceOverview";
+import {
+  BusinessWorkspaceOverview,
+  ControlWorkspaceOverview,
+  MoneyWorkspaceOverview
+} from "../shared/financeUi";
 
 export type PageDefinition = { id: string; label: string; meta: string };
 export type NavBucket = { id: string; label: string; summary: string; pages: string[]; defaultPage: string };
@@ -200,4 +206,24 @@ const featureById = new Map(featureManifests.map((feature) => [feature.id, featu
 export function renderFeaturePage(pageId: string, context: FeatureRenderContext): ReactNode {
   const feature = featureById.get(pageId) || featureManifests[0];
   return feature.render(context);
+}
+
+export function renderWorkspaceOverview(
+  workspaceId: string,
+  activePageId: string,
+  onSelect: (pageId: string) => void
+): ReactNode {
+  if (workspaceId === "money") {
+    return <MoneyWorkspaceOverview activePageId={activePageId} onSelect={onSelect} />;
+  }
+  if (workspaceId === "planning") {
+    return <PlanningWorkspaceOverview activePageId={activePageId} onSelect={onSelect} />;
+  }
+  if (workspaceId === "business") {
+    return <BusinessWorkspaceOverview activePageId={activePageId} onSelect={onSelect} />;
+  }
+  if (workspaceId === "control") {
+    return <ControlWorkspaceOverview activePageId={activePageId} onSelect={onSelect} />;
+  }
+  return null;
 }

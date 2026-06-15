@@ -5,7 +5,6 @@ export function LiveInvoicesSection({ model }: { model: any }) {
     RowDisclosureButton,
     formatCount,
     formatCurrency,
-    formatSignedCurrency,
     toDateValue,
     clients,
     invoices,
@@ -75,7 +74,9 @@ export function LiveInvoicesSection({ model }: { model: any }) {
               const amountValue = paymentAmounts[invoice.id] ?? String(invoice.total);
               const isExpanded = expandedInvoiceId === invoice.id;
               const balanceDue = Number(invoice.balance_due ?? invoice.total ?? 0);
+              const paidTotal = Number(invoice.paid_total ?? 0);
               const invoiceStatusLabel = invoice.is_overdue ? "overdue" : (invoice.status || "draft");
+              const lifecycleStatus = invoice.status === "void" ? "void" : invoice.status === "draft" ? "draft" : "sent";
               return (
                 <Fragment key={invoice.id}>
                   <tr>
@@ -107,28 +108,43 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                       <td colSpan={4}>
                         <div className="table-detail-grid">
                           <div className="table-detail-card">
-                            <div className="table-detail-title">Invoice controls</div>
-                            <div className="row invoice-send-row">
-                              <input
-                                className="invoice-send-input"
-                                placeholder="Recipient email"
-                                value={invoiceRecipientEmails[invoice.id] ?? String(client?.email || "")}
-                                onChange={(e) =>
-                                  setInvoiceRecipientEmails((prev: Record<number, string>) => ({ ...prev, [invoice.id]: e.target.value }))
-                                }
-                              />
+                            <div className="invoice-detail-head">
+                              <div>
+                                <div className="table-detail-title">Invoice controls</div>
+                                <div className="invoice-detail-subtitle">{invoice.number || `INV-${invoice.id}`}</div>
+                              </div>
+                              <span className={`status-pill status-${String(invoiceStatusLabel).toLowerCase()}`}>
+                                {invoiceStatusLabel}
+                              </span>
                             </div>
-                            <div className="row invoice-action-row">
-                              <select
-                                value={invoice.status}
-                                onChange={(e) => updateInvoiceStatus(invoice.id, e.target.value)}
-                              >
-                                <option value="draft">Draft</option>
-                                <option value="sent">Sent</option>
-                                <option value="partial">Partial</option>
-                                <option value="paid">Paid</option>
-                                <option value="void">Void</option>
-                              </select>
+                            <div className="invoice-control-grid">
+                              <label className="invoice-control-field invoice-control-field-wide">
+                                <span>Recipient</span>
+                                <input
+                                  className="invoice-send-input"
+                                  placeholder="Recipient email"
+                                  value={invoiceRecipientEmails[invoice.id] ?? String(client?.email || "")}
+                                  onChange={(e) =>
+                                    setInvoiceRecipientEmails((prev: Record<number, string>) => ({
+                                      ...prev,
+                                      [invoice.id]: e.target.value
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="invoice-control-field">
+                                <span>Lifecycle</span>
+                                <select
+                                  value={lifecycleStatus}
+                                  onChange={(e) => updateInvoiceStatus(invoice.id, e.target.value)}
+                                >
+                                  <option value="draft">Draft</option>
+                                  <option value="sent">Sent</option>
+                                  <option value="void">Void</option>
+                                </select>
+                              </label>
+                            </div>
+                            <div className="invoice-action-toolbar">
                               <button
                                 className="button-link"
                                 onClick={() => openInvoicePreview(invoice)}
@@ -143,7 +159,7 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                               >
                                 Download
                               </button>
-                              {invoice.status === "draft" && (
+                              {lifecycleStatus === "draft" && (
                                 <button className="button-ghost button-small" onClick={() => sendInvoice(invoice)} type="button">
                                   Send
                                 </button>
@@ -155,64 +171,59 @@ export function LiveInvoicesSection({ model }: { model: any }) {
                               >
                                 Edit
                               </button>
-                              <button className="button-small" onClick={() => deleteInvoice(invoice.id)} type="button">
+                              <button className="button-ghost button-small button-danger" onClick={() => deleteInvoice(invoice.id)} type="button">
                                 Delete
                               </button>
                             </div>
-                            <div className="table-detail-copy">
-                              <div>
-                                <strong>Email target:</strong> {String(invoiceRecipientEmails[invoice.id] ?? client?.email ?? "").trim() || "—"}
-                              </div>
-                              <div>
-                                <strong>Issue date:</strong> {toDateValue(invoice.issue_date) || "—"}
-                              </div>
-                              <div>
-                                <strong>Due date:</strong> {toDateValue(invoice.due_date) || "—"}
-                              </div>
-                              <div>
-                                <strong>Line subtotal:</strong> {formatCurrency(invoice.subtotal, invoice.currency)}
-                              </div>
-                              {Math.abs(Number(invoice.adjustment || 0)) > 0.005 && (
-                                <div>
-                                  <strong>Adjustment:</strong> {formatSignedCurrency(invoice.adjustment, invoice.currency)}
-                                </div>
-                              )}
-                              <div>
-                                <strong>Notes:</strong> {invoice.notes || "—"}
-                              </div>
-                            </div>
                           </div>
                           <div className="table-detail-card">
-                            <div className="table-detail-title">Payment matching</div>
-                            <div className="invoice-payment-row">
-                              <input
-                                className="invoice-payment-amount"
-                                placeholder="Amount"
-                                value={amountValue}
-                                onChange={(e) =>
-                                  setPaymentAmounts((prev: Record<number, string>) => ({ ...prev, [invoice.id]: e.target.value }))
-                                }
-                              />
-                              <select
-                                className="invoice-payment-select"
-                                onChange={(e) => applyPayment(invoice.id, Number(e.target.value), Number(amountValue))}
-                                value=""
-                              >
-                                <option value="">Apply payment</option>
-                                {incomingTransactions.map((txn: any) => (
-                                  <option key={txn.id} value={txn.id}>
-                                    {txn.date} {txn.account_name ? `${txn.account_name} · ` : ""}
-                                    {txn.description} {formatCurrency(txn.amount, txn.currency)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="table-detail-copy">
+                            <div className="invoice-detail-head">
                               <div>
-                                <strong>Total due:</strong> {formatCurrency(invoice.total, invoice.currency)}
+                                <div className="table-detail-title">Payment matching</div>
+                                <div className="invoice-detail-subtitle">{formatCurrency(balanceDue, invoice.currency)} open</div>
+                              </div>
+                            </div>
+                            <div className="invoice-payment-row">
+                              <label className="invoice-control-field">
+                                <span>Amount</span>
+                                <input
+                                  className="invoice-payment-amount"
+                                  placeholder="Amount"
+                                  value={amountValue}
+                                  onChange={(e) =>
+                                    setPaymentAmounts((prev: Record<number, string>) => ({ ...prev, [invoice.id]: e.target.value }))
+                                  }
+                                />
+                              </label>
+                              <label className="invoice-control-field">
+                                <span>Receipt</span>
+                                <select
+                                  className="invoice-payment-select"
+                                  onChange={(e) => applyPayment(invoice.id, Number(e.target.value), Number(amountValue))}
+                                  value=""
+                                >
+                                  <option value="">Apply payment</option>
+                                  {incomingTransactions.map((txn: any) => (
+                                    <option key={txn.id} value={txn.id}>
+                                      {txn.date} {txn.account_name ? `${txn.account_name} · ` : ""}
+                                      {txn.description} {formatCurrency(txn.amount, txn.currency)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="invoice-payment-summary">
+                              <div>
+                                <span>Total</span>
+                                <strong>{formatCurrency(invoice.total, invoice.currency)}</strong>
                               </div>
                               <div>
-                                <strong>Balance due:</strong> {formatCurrency(balanceDue, invoice.currency)}
+                                <span>Applied</span>
+                                <strong>{formatCurrency(paidTotal, invoice.currency)}</strong>
+                              </div>
+                              <div>
+                                <span>Balance</span>
+                                <strong>{formatCurrency(balanceDue, invoice.currency)}</strong>
                               </div>
                             </div>
                           </div>

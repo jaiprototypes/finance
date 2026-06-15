@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ...db import get_session
 from .models import ArchivedInvoice, ArchivedInvoicePaymentLink, Client, Invoice, InvoiceLineItem, InvoicePaymentLink
-from .schemas import ArchivedInvoiceDetailOut, ArchivedInvoiceOut, ArchivedInvoiceUpdate, ClientCreate, ClientOut, InvoiceCreate, InvoiceOut, InvoicePaymentApply, InvoiceSendRequest
+from .schemas import ArchivedInvoiceDetailOut, ArchivedInvoiceOut, ArchivedInvoiceUpdate, ClientCreate, ClientOut, InvoiceCreate, InvoiceNumberPreviewOut, InvoiceOut, InvoicePaymentApply, InvoiceSendRequest
 from .archived_invoices import (
     apply_archived_invoice_payment,
     archived_invoice_detail,
@@ -20,8 +20,9 @@ from .archived_invoices import (
     serialize_archived_invoice,
     update_archived_invoice,
 )
+from .business_receivables import compute_receivable_status
 from .service import ReceivableTrackingService
-from .invoices import create_invoice, apply_payment, update_invoice
+from .invoices import apply_payment, create_invoice, preview_invoice_number, update_invoice
 from .invoice_tracking import (
     invoice_payment_summary,
     serialize_invoice,
@@ -39,6 +40,17 @@ def list_clients(session: Session = Depends(get_session)):
     return session.execute(
         select(Client).order_by(Client.is_active.desc(), func.lower(Client.name), Client.id)
     ).scalars().all()
+
+
+@router.get("/clients/{client_id}/next-invoice-number", response_model=InvoiceNumberPreviewOut)
+def next_invoice_number(client_id: int, issue_date: str | None = None, session: Session = Depends(get_session)):
+    client = session.execute(select(Client).where(Client.id == client_id)).scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {
+        "client_id": client.id,
+        "number": preview_invoice_number(session, client_id=client.id, issue_date=issue_date),
+    }
 
 
 @router.post("/clients", response_model=ClientOut)
@@ -370,7 +382,13 @@ def update_invoice_status(invoice_id: int, status: str, session: Session = Depen
     invoice = session.execute(select(Invoice).where(Invoice.id == invoice_id)).scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    invoice.status = status
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"draft", "sent", "void"}:
+        raise HTTPException(status_code=400, detail="Paid and partial statuses are set by applying payments")
+    paid_total = session.execute(
+        select(func.sum(InvoicePaymentLink.amount)).where(InvoicePaymentLink.invoice_id == invoice_id)
+    ).scalar()
+    invoice.status = compute_receivable_status(normalized_status, float(invoice.total or 0.0), float(paid_total or 0.0))
     session.commit()
     return {"status": "ok", "invoice_status": invoice.status}
 

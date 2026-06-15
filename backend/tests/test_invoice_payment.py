@@ -12,6 +12,7 @@ from backend.app.features.receivables.business_router import (
     delete_invoice as delete_invoice_route,
     invoice_detail,
     invoice_pdf as invoice_pdf_route,
+    next_invoice_number,
     send_invoice as send_invoice_route,
     update_invoice_route,
     update_invoice_status as update_invoice_status_route,
@@ -530,6 +531,88 @@ def test_create_invoice_route_supports_agreed_total_lower_than_line_item_subtota
     assert result["adjustment"] == -150.0
 
 
+def test_next_invoice_number_tracks_client_numeric_sequence():
+    session = make_session()
+    client = Client(
+        name="Gould Energy Engineering Consulting LLC",
+        email=None,
+        phone=None,
+        address=None,
+        notes=None,
+        is_active=1,
+    )
+    session.add(client)
+    session.commit()
+
+    for number in ["20", "21"]:
+        session.add(
+            Invoice(
+                client_id=client.id,
+                number=number,
+                status="sent",
+                issue_date="2026-04-24",
+                due_date=None,
+                currency="USD",
+                subtotal=100.0,
+                tax=0.0,
+                total=100.0,
+                notes=None,
+                created_at="2026-04-24T00:00:00+00:00",
+            )
+        )
+    session.commit()
+
+    assert next_invoice_number(client.id, session=session) == {
+        "client_id": client.id,
+        "number": "22",
+    }
+
+
+def test_create_invoice_route_uses_client_sequence_when_number_is_blank():
+    session = make_session()
+    client = Client(
+        name="Gould Energy Engineering Consulting LLC",
+        email=None,
+        phone=None,
+        address=None,
+        notes=None,
+        is_active=1,
+    )
+    session.add(client)
+    session.commit()
+    session.add(
+        Invoice(
+            client_id=client.id,
+            number="21",
+            status="sent",
+            issue_date="2026-06-03",
+            due_date=None,
+            currency="USD",
+            subtotal=100.0,
+            tax=0.0,
+            total=100.0,
+            notes=None,
+            created_at="2026-06-03T00:00:00+00:00",
+        )
+    )
+    session.commit()
+
+    result = create_invoice_route(
+        InvoiceCreate(
+            client_id=client.id,
+            number="",
+            status="draft",
+            issue_date="2026-06-15",
+            due_date=None,
+            currency="USD",
+            line_items=[{"description": "Consulting", "quantity": 1, "unit_price": 250.0}],
+        ),
+        session=session,
+    )
+
+    assert result["number"] == "22"
+
+
 def test_update_invoice_route_rejects_total_below_linked_payments():
     session = make_session()
     account = Account(
@@ -943,6 +1026,38 @@ def test_update_invoice_status_route_persists_status():
 
     assert result == {"status": "ok", "invoice_status": "sent"}
     assert session.execute(select(Invoice).where(Invoice.id == invoice.id)).scalar_one().status == "sent"
+
+
+def test_update_invoice_status_route_rejects_payment_derived_statuses():
+    session = make_session()
+    client = Client(name="Client", email=None, phone=None, address=None, notes=None, is_active=1)
+    session.add(client)
+    session.commit()
+
+    invoice = Invoice(
+        client_id=client.id,
+        number="INV-STATUS-DERIVED-001",
+        status="sent",
+        issue_date="2026-04-24",
+        due_date=None,
+        currency="USD",
+        subtotal=50.0,
+        tax=0.0,
+        total=50.0,
+        notes=None,
+        created_at="2026-04-24T00:00:00+00:00",
+    )
+    session.add(invoice)
+    session.commit()
+
+    for status in ("partial", "paid"):
+        try:
+            update_invoice_status_route(invoice.id, status, session=session)
+        except HTTPException as exc:
+            assert exc.status_code == 400
+            assert exc.detail == "Paid and partial statuses are set by applying payments"
+        else:
+            raise AssertionError(f"Expected {status} status update to fail")
 
 
 def test_send_invoice_route_marks_invoice_sent(monkeypatch):

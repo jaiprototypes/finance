@@ -1,5 +1,6 @@
+import { useCallback, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { removeFeatureRecord, getFeatureData, sendFeatureCommand } from "../api";
+import { getFeatureData, getNextInvoiceNumber, removeFeatureRecord, sendFeatureCommand } from "../api";
 import { todayDate } from "../../../shared/financeUi";
 
 type InvoiceForm = {
@@ -69,7 +70,37 @@ export function useBusinessInvoiceCommands({
   setInvoiceToolOpenToken,
   setLineItems
 }: BusinessInvoiceCommandsArgs) {
+  const autoInvoiceNumberRef = useRef("");
+
+  const populateDraftInvoiceNumber = useCallback(
+    async (clientIdValue: string, issueDateValue: string, forceReplace = false) => {
+      const clientId = Number(clientIdValue);
+      if (editingInvoiceId || !Number.isFinite(clientId) || clientId <= 0) {
+        autoInvoiceNumberRef.current = "";
+        return;
+      }
+      const previousAutoNumber = autoInvoiceNumberRef.current;
+      try {
+        const preview = await getNextInvoiceNumber(clientId, issueDateValue || todayDate());
+        const nextNumber = String(preview.number || "");
+        autoInvoiceNumberRef.current = nextNumber;
+        setInvoiceForm((prev) => {
+          if (editingInvoiceId || prev.client_id !== String(clientId)) {
+            return prev;
+          }
+          const currentNumber = prev.number.trim();
+          const shouldReplace = forceReplace || !currentNumber || currentNumber === previousAutoNumber;
+          return shouldReplace ? { ...prev, number: nextNumber } : prev;
+        });
+      } catch (err) {
+        setInvoiceError(err instanceof Error ? err.message : "Unable to load the next invoice number.");
+      }
+    },
+    [editingInvoiceId, setInvoiceError, setInvoiceForm],
+  );
+
   const resetInvoiceForm = () => {
+    autoInvoiceNumberRef.current = "";
     setEditingInvoiceId(null);
     setInvoiceForm(buildEmptyInvoiceForm());
     setLineItems(buildEmptyLineItems());
@@ -80,9 +111,37 @@ export function useBusinessInvoiceCommands({
     setInvoiceNotice(null);
     setInvoiceSendError(null);
     setEditingInvoiceId(null);
+    autoInvoiceNumberRef.current = "";
     setInvoiceForm(buildEmptyInvoiceForm(clientId));
     setLineItems(buildEmptyLineItems());
+    if (clientId) {
+      void populateDraftInvoiceNumber(String(clientId), todayDate(), true);
+    }
     setInvoiceToolOpenToken((prev) => prev + 1);
+  };
+
+  const selectInvoiceClient = (clientId: string) => {
+    const issueDate = invoiceForm.issue_date || todayDate();
+    autoInvoiceNumberRef.current = "";
+    setInvoiceForm((prev) => ({
+      ...prev,
+      client_id: clientId,
+      number: editingInvoiceId ? prev.number : ""
+    }));
+    if (clientId) {
+      void populateDraftInvoiceNumber(clientId, issueDate, true);
+    }
+  };
+
+  const setInvoiceIssueDate = (issueDate: string) => {
+    setInvoiceForm((prev) => ({ ...prev, issue_date: issueDate }));
+    if (invoiceForm.client_id) {
+      void populateDraftInvoiceNumber(invoiceForm.client_id, issueDate || todayDate());
+    }
+  };
+
+  const setInvoiceNumber = (number: string) => {
+    setInvoiceForm((prev) => ({ ...prev, number }));
   };
 
   const addLineItem = () => {
@@ -198,6 +257,7 @@ export function useBusinessInvoiceCommands({
         .filter((item: InvoiceLineItem) => item.description || item.quantity || item.unit_price);
       setInvoiceError(null);
       setEditingInvoiceId(invoiceId);
+      autoInvoiceNumberRef.current = "";
       setInvoiceForm({
         client_id: String(invoice.client_id || ""),
         number: String(invoice.number || ""),
@@ -262,7 +322,10 @@ export function useBusinessInvoiceCommands({
     removeLineItem,
     resetInvoiceForm,
     saveInvoice,
+    selectInvoiceClient,
     sendInvoice,
+    setInvoiceIssueDate,
+    setInvoiceNumber,
     startEditInvoice,
     updateInvoiceStatus,
     updateLineItem

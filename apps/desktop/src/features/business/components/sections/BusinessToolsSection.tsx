@@ -47,6 +47,9 @@ export function BusinessToolsSection({ model }: { model: any }) {
     resetInvoiceForm,
     resetArchiveForm,
     saveClient,
+    selectInvoiceClient,
+    setInvoiceIssueDate,
+    setInvoiceNumber,
     addLineItem,
     updateLineItem,
     removeLineItem,
@@ -98,7 +101,7 @@ export function BusinessToolsSection({ model }: { model: any }) {
                   <div className="invoice-compose-grid">
                     <select
                       value={invoiceForm.client_id}
-                      onChange={(e) => setInvoiceForm({ ...invoiceForm, client_id: e.target.value })}
+                      onChange={(e) => selectInvoiceClient(e.target.value)}
                     >
                       <option value="">Select client</option>
                       {activeClients.map((client: any) => (
@@ -110,12 +113,12 @@ export function BusinessToolsSection({ model }: { model: any }) {
                     <input
                       placeholder="Invoice number"
                       value={invoiceForm.number}
-                      onChange={(e) => setInvoiceForm({ ...invoiceForm, number: e.target.value })}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
                     />
                     <input
                       type="date"
                       value={toDateValue(invoiceForm.issue_date)}
-                      onChange={(e) => setInvoiceForm({ ...invoiceForm, issue_date: e.target.value })}
+                      onChange={(e) => setInvoiceIssueDate(e.target.value)}
                     />
                     <input
                       type="date"

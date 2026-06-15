@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { API_BASE, apiGet } from "../shared/api/client";
 import defaultLogo from "../assets/logo.png";
-import { PAGE_FOCUS_COPY, defaultWorkspaceView, navBuckets, pages, renderFeaturePage } from "./featureRegistry";
 import {
-  BusinessWorkspaceOverview,
-  ControlWorkspaceOverview,
-  MoneyWorkspaceOverview,
+  PAGE_FOCUS_COPY,
+  defaultWorkspaceView,
+  navBuckets,
+  pages,
+  renderFeaturePage,
+  renderWorkspaceOverview
+} from "./featureRegistry";
+import {
   PlaidOAuthRedirectHandler,
-  PlanningWorkspaceOverview,
   WorkspaceShell,
   isPlaidOAuthRedirectLocation,
   toLogoSrc
@@ -117,22 +120,6 @@ export default function AppShell() {
     navigateToPage("reports");
   };
 
-  const renderWorkspaceOverview = () => {
-    if (activeBucket.id === "money") {
-      return <MoneyWorkspaceOverview activePageId={activePageId} onSelect={navigateToPage} />;
-    }
-    if (activeBucket.id === "planning") {
-      return <PlanningWorkspaceOverview activePageId={activePageId} onSelect={navigateToPage} />;
-    }
-    if (activeBucket.id === "business") {
-      return <BusinessWorkspaceOverview activePageId={activePageId} onSelect={navigateToPage} />;
-    }
-    if (activeBucket.id === "control") {
-      return <ControlWorkspaceOverview activePageId={activePageId} onSelect={navigateToPage} />;
-    }
-    return null;
-  };
-
   const renderPage = (pageId: string) =>
     renderFeaturePage(pageId, {
       accountFocus,
@@ -199,7 +186,7 @@ export default function AppShell() {
               activePage={activePage}
               focusCopy={PAGE_FOCUS_COPY[activePageId] || activePage.meta}
               onSelect={navigateToPage}
-              overview={renderWorkspaceOverview()}
+              overview={renderWorkspaceOverview(activeBucket.id, activePageId, navigateToPage)}
             >
               {renderPage(activePageId)}
             </WorkspaceShell>

@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 from datetime import datetime
 import math
+import re
 from sqlalchemy import select, func
 
-from .models import Invoice, InvoiceLineItem, InvoicePaymentLink
+from .models import ArchivedInvoice, Invoice, InvoiceLineItem, InvoicePaymentLink
 from .business_receivables import (
     compute_receivable_status,
     mark_transaction_as_business_receipt,
@@ -17,11 +19,26 @@ def _normalize_number(value) -> str | None:
     return text or None
 
 
+_DEFAULT_DATE_NUMBER_RE = re.compile(r"^INV-\d{8}-\d+$")
+_TRAILING_SEQUENCE_RE = re.compile(r"^(?P<prefix>.*?)(?P<sequence>\d+)$")
+
+
+@dataclass(frozen=True)
+class InvoiceNumberSequence:
+    prefix: str
+    value: int
+    width: int
+
+
 def _number_exists(session, number: str, exclude_id: int | None = None) -> bool:
     query = select(Invoice.id).where(Invoice.number == number)
     if exclude_id:
         query = query.where(Invoice.id != exclude_id)
-    return session.execute(query).scalar_one_or_none() is not None
+    if session.execute(query).scalar_one_or_none() is not None:
+        return True
+    return session.execute(
+        select(ArchivedInvoice.id).where(ArchivedInvoice.number == number)
+    ).scalar_one_or_none() is not None
 
 
 def _generate_number(session, issue_date: str | None) -> str:
@@ -40,10 +57,69 @@ def _generate_number(session, issue_date: str | None) -> str:
     return candidate
 
 
-def _ensure_unique_number(session, proposed: str | None, issue_date: str | None, exclude_id: int | None = None) -> str:
+def _parse_custom_sequence(number: str | None) -> InvoiceNumberSequence | None:
+    normalized = _normalize_number(number)
+    # Date-based defaults stay date-scoped; client-specific patterns like "21" or "GECG-021" continue sequentially.
+    if not normalized or _DEFAULT_DATE_NUMBER_RE.match(normalized):
+        return None
+    match = _TRAILING_SEQUENCE_RE.match(normalized)
+    if not match:
+        return None
+    sequence_text = match.group("sequence")
+    return InvoiceNumberSequence(
+        prefix=match.group("prefix"),
+        value=int(sequence_text),
+        width=len(sequence_text),
+    )
+
+
+def _client_invoice_sequences(session, client_id: int) -> list[InvoiceNumberSequence]:
+    live_numbers = session.execute(
+        select(Invoice.number).where(Invoice.client_id == client_id)
+    ).scalars()
+    archived_numbers = session.execute(
+        select(ArchivedInvoice.number).where(ArchivedInvoice.client_id == client_id)
+    ).scalars()
+    return [
+        sequence
+        for sequence in (_parse_custom_sequence(number) for number in [*live_numbers, *archived_numbers])
+        if sequence is not None
+    ]
+
+
+def _format_next_sequence(sequence: InvoiceNumberSequence, next_value: int) -> str:
+    width = max(sequence.width, len(str(next_value)))
+    return f"{sequence.prefix}{next_value:0{width}d}"
+
+
+def _generate_client_number(session, client_id: int, issue_date: str | None) -> str:
+    sequences = _client_invoice_sequences(session, client_id)
+    if not sequences:
+        return _generate_number(session, issue_date)
+
+    latest = max(sequences, key=lambda sequence: sequence.value)
+    next_value = latest.value + 1
+    candidate = _format_next_sequence(latest, next_value)
+    while _number_exists(session, candidate):
+        next_value += 1
+        candidate = _format_next_sequence(latest, next_value)
+    return candidate
+
+
+def preview_invoice_number(session, client_id: int, issue_date: str | None = None) -> str:
+    return _generate_client_number(session, client_id, issue_date)
+
+
+def _ensure_unique_number(
+    session,
+    client_id: int,
+    proposed: str | None,
+    issue_date: str | None,
+    exclude_id: int | None = None,
+) -> str:
     normalized = _normalize_number(proposed)
     if not normalized:
-        return _generate_number(session, issue_date)
+        return _generate_client_number(session, client_id, issue_date)
     if not _number_exists(session, normalized, exclude_id=exclude_id):
         return normalized
     suffix = 2
@@ -80,7 +156,7 @@ def _paid_total_for_invoice(session, invoice_id: int) -> float:
 
 def create_invoice(session, data: dict) -> Invoice:
     subtotal, tax, total = _compute_invoice_totals(data)
-    number = _ensure_unique_number(session, data.get("number"), data.get("issue_date"))
+    number = _ensure_unique_number(session, data["client_id"], data.get("number"), data.get("issue_date"))
 
     invoice = Invoice(
         client_id=data["client_id"],
@@ -120,7 +196,13 @@ def update_invoice(session, invoice_id: int, data: dict) -> Invoice:
     paid_total = _paid_total_for_invoice(session, invoice_id)
     if total + 0.005 < paid_total:
         raise ValueError("Invoice total cannot be lower than linked payments")
-    number = _ensure_unique_number(session, data.get("number"), data.get("issue_date"), exclude_id=invoice_id)
+    number = _ensure_unique_number(
+        session,
+        data["client_id"],
+        data.get("number"),
+        data.get("issue_date"),
+        exclude_id=invoice_id,
+    )
 
     invoice.client_id = data["client_id"]
     invoice.number = number

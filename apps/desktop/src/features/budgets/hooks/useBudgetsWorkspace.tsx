@@ -14,6 +14,10 @@ import { buildBudgetMatrixModel } from "./budgetMatrixModel";
 import { createBudgetSubcategoryRenderers } from "./budgetSubcategoryRenderers";
 import { useBudgetMatrixDrilldown } from "./useBudgetMatrixDrilldown";
 
+function loadErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export function useBudgetsWorkspace() {
   const [months, setMonths] = useState<any[]>([]);
   const [matrixCategories, setMatrixCategories] = useState<any[]>([]);
@@ -42,8 +46,12 @@ export function useBudgetsWorkspace() {
   };
 
   useEffect(() => {
-    loadMonths().catch(() => undefined);
-    loadMatrixCategories().catch(() => undefined);
+    loadMonths().catch((err) =>
+      setMatrixError((current) => current || loadErrorMessage(err, "Unable to load budget months."))
+    );
+    loadMatrixCategories().catch((err) =>
+      setMatrixError((current) => current || loadErrorMessage(err, "Unable to load budget categories."))
+    );
   }, []);
 
   const loadMatrix = async (yearValue?: string) => {
@@ -76,7 +84,14 @@ export function useBudgetsWorkspace() {
   };
 
   useEffect(() => {
-    loadMatrix().catch(() => undefined);
+    let cancelled = false;
+    setMatrixError(null);
+    loadMatrix().catch((err) => {
+      if (!cancelled) setMatrixError(loadErrorMessage(err, `Unable to load budget matrix for ${matrixYear}.`));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [matrixYear]);
 
   const ensureMonthId = async (month: string) => {
@@ -516,6 +531,7 @@ export function useBudgetsWorkspace() {
     incomeRows,
     expenseRows,
     matrixColSpan,
+    matrixMonths,
     budgetCurrency,
     plannedClosingBalance,
     invalidMonths,

@@ -32,6 +32,12 @@ class InvoiceCreate(BaseModel):
     agreed_total: Optional[float] = None
     line_items: list[InvoiceLineItemCreate]
 
+
+class InvoiceNumberPreviewOut(BaseModel):
+    client_id: int
+    number: str
+
+
 class InvoiceOut(BaseModel):
     id: int
     client_id: int
@@ -134,4 +140,4 @@ class ArchivedInvoiceDetailOut(BaseModel):
     paid_total: float
     balance_due: float
 
-__all__ = ['ClientCreate', 'ClientOut', 'InvoiceLineItemCreate', 'InvoiceCreate', 'InvoiceOut', 'ArchivedInvoiceOut', 'ArchivedInvoiceUpdate', 'InvoiceSendRequest', 'InvoicePaymentApply', 'ArchivedInvoicePaymentLinkOut', 'ReceiptCandidateOut', 'ArchivedInvoiceDetailOut']
+__all__ = ['ClientCreate', 'ClientOut', 'InvoiceLineItemCreate', 'InvoiceCreate', 'InvoiceNumberPreviewOut', 'InvoiceOut', 'ArchivedInvoiceOut', 'ArchivedInvoiceUpdate', 'InvoiceSendRequest', 'InvoicePaymentApply', 'ArchivedInvoicePaymentLinkOut', 'ReceiptCandidateOut', 'ArchivedInvoiceDetailOut']
