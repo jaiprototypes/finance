@@ -1,8 +1,8 @@
 from fpdf import FPDF
 from sqlalchemy import select
 
-from backend.app.models import Account, ArchivedInvoice, Client, Invoice, InvoiceLineItem, Transaction
-from backend.app.services.archived_invoices import (
+from backend.app.features.ledger.models import Account, Transaction
+from backend.app.features.receivables.archived_invoices import (
     apply_archived_invoice_payment,
     archived_invoice_detail,
     create_archived_invoice_from_upload,
@@ -11,7 +11,8 @@ from backend.app.services.archived_invoices import (
     serialize_archived_invoice,
     update_archived_invoice,
 )
-from backend.app.services.invoice_tracking import auto_track_archived_invoices, auto_track_receivables
+from backend.app.features.receivables.invoice_tracking import auto_track_archived_invoices, auto_track_receivables
+from backend.app.features.receivables.models import ArchivedInvoice, Client, Invoice, InvoiceLineItem
 from backend.tests.utils import make_session
 
 
@@ -423,7 +424,7 @@ def test_live_invoice_payment_rejects_transaction_fully_allocated_to_historical_
     )
     session.commit()
 
-    from backend.app.services.invoices import apply_payment
+    from backend.app.features.receivables.invoices import apply_payment
 
     try:
         apply_payment(session, invoice.id, transaction.id, 100.0)
@@ -603,7 +604,7 @@ def test_auto_track_receivables_skips_cross_pool_receipt_conflict():
     refreshed_invoice = session.execute(select(Invoice).where(Invoice.id == invoice.id)).scalar_one()
     archive_payload = serialize_archived_invoice(session, refreshed_archive)
 
-    from backend.app.services.invoice_tracking import serialize_invoice
+    from backend.app.features.receivables.invoice_tracking import serialize_invoice
 
     live_payload = serialize_invoice(session, refreshed_invoice)
     assert tracking["auto_applied"] == 0

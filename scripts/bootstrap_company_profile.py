@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 
 from backend.app.db import init_db, session_scope
-from backend.app.services.settings import set_setting
+from backend.app.features.settings.service import set_setting
 
 
 def parse_args() -> argparse.Namespace:

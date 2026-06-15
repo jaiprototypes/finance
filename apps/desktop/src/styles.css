@@ -2181,16 +2181,16 @@ tbody tr:hover {
 
 .table-detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 0.9rem;
 }
 
 .table-detail-card {
   border: 1px solid rgba(0, 102, 255, 0.12);
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 1rem;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: var(--shadow);
+  box-shadow: 0 12px 28px rgba(0, 77, 186, 0.08);
 }
 
 .table-detail-title {
@@ -2202,9 +2202,86 @@ tbody tr:hover {
   margin-bottom: 0.7rem;
 }
 
+.invoice-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.invoice-detail-head .table-detail-title {
+  margin-bottom: 0.2rem;
+}
+
+.invoice-detail-subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.invoice-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 11rem);
+  gap: 0.8rem;
+  align-items: end;
+}
+
+.invoice-control-field {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.invoice-control-field span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.invoice-control-field input,
+.invoice-control-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.invoice-action-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+.button-danger {
+  margin-left: auto;
+  border-color: rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
+}
+
+.button-danger:hover {
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.14);
+}
+
 .table-detail-copy {
   display: grid;
   gap: 0.45rem;
+}
+
+.invoice-payment-summary span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.invoice-payment-summary strong {
+  color: var(--ink);
+  font-size: 0.96rem;
 }
 
 .invoice-action-row {
@@ -2227,9 +2304,34 @@ tbody tr:hover {
   max-width: 100%;
 }
 
+.invoice-payment-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.95rem;
+}
+
+.invoice-payment-summary > div {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(0, 102, 255, 0.055);
+  border: 1px solid rgba(0, 102, 255, 0.08);
+}
+
 @media (max-width: 900px) {
+  .invoice-control-grid,
+  .invoice-payment-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .invoice-payment-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .button-danger {
+    margin-left: 0;
   }
 }
 

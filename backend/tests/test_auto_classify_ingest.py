@@ -2,9 +2,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from backend.app.api import up as up_api
-from backend.app.models import Account, Category, PlaidAccount, PlaidItem, PlaidTransaction, Transaction, TransactionSplit, UpAccount
-from backend.app.services import plaid_client, up_client
+from backend.app.features.connectors import plaid_client, up_client
+from backend.app.features.connectors import up_router as up_api
+from backend.app.features.connectors.models import PlaidAccount, PlaidItem, PlaidTransaction, UpAccount
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.taxonomy.models import Category
 from backend.tests.utils import make_session
 
 

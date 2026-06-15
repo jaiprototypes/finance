@@ -7,7 +7,9 @@ import uvicorn
 def load_app():
     try:
         from backend.app.main import app
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as exc:
+        if exc.name not in {"backend", "backend.app", "backend.app.main"}:
+            raise
         backend_dir = Path(__file__).resolve().parent
         if str(backend_dir) not in sys.path:
             sys.path.insert(0, str(backend_dir))

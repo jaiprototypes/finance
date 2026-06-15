@@ -2,12 +2,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from backend.app.api import categories as categories_api
-from backend.app.api import transactions as transactions_api
-from backend.app.models import Account, Category, MerchantProfile, Subcategory, Transaction, TransactionSplit
-from backend.app.schemas import SubcategoryCreate, TransactionSplitCreate, TransactionSplitUpdate
-from backend.app.services import classification
-from backend.app.services.subcategories import ensure_subcategory
+from backend.app.features.classification import service as classification
+from backend.app.features.classification.models import MerchantProfile
+from backend.app.features.ledger import transactions_router as transactions_api
+from backend.app.features.ledger.models import Account, Transaction, TransactionSplit
+from backend.app.features.ledger.schemas import TransactionSplitCreate, TransactionSplitUpdate
+from backend.app.features.taxonomy import categories_router as categories_api
+from backend.app.features.taxonomy.models import Category, Subcategory
+from backend.app.features.taxonomy.schemas import SubcategoryCreate
+from backend.app.features.taxonomy.subcategories import ensure_subcategory
 from backend.tests.utils import make_session
 
 

@@ -1,9 +1,9 @@
 import pytest
 
-from backend.app.api import settings as settings_api
-from backend.app.schemas import SettingsUpdate
-from backend.app.services import classification
-from backend.app.services.settings import get_setting, set_setting, validate_llm_configuration
+from backend.app.features.classification import service as classification
+from backend.app.features.settings import router as settings_api
+from backend.app.features.settings.schemas import SettingsUpdate
+from backend.app.features.settings.service import get_setting, set_setting, validate_llm_configuration
 from backend.tests.utils import make_session
 
 

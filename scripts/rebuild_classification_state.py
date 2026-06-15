@@ -36,11 +36,17 @@ for env_name in (".env.local_ai", ".env.plaid", ".env.up"):
 
 from sqlalchemy import select, text
 
-from backend.app.api.classification import _build_payload, _is_legacy_opening
 from backend.app.config import BACKUP_DIR, DB_PATH
 from backend.app.db import init_db, session_scope
-from backend.app.models import Category, ClassificationAudit, MerchantProfile, Transaction, TransactionMemory, TransactionSplit
-from backend.app.services.classification import apply_classification, classify_payload
+from backend.app.features.classification.service import (
+    apply_classification,
+    build_transaction_payload,
+    classify_payload,
+    is_legacy_opening_transaction,
+)
+from backend.app.features.classification.models import ClassificationAudit, MerchantProfile, TransactionMemory
+from backend.app.features.ledger.models import Transaction, TransactionSplit
+from backend.app.features.taxonomy.models import Category
 
 
 TRANSFER_LIKE_TERMS = ("transfer", "wise", "payid", "osko", "wire", "remit", "xfer", "bpay")
@@ -96,10 +102,10 @@ def snapshot_before() -> dict[str, Any]:
         transfer_like_rows: list[dict[str, Any]] = []
         all_txn_ids: list[int] = []
         for txn in txns:
-            if _is_legacy_opening(txn.description, txn.notes, txn.payee):
+            if is_legacy_opening_transaction(txn.description, txn.notes, txn.payee):
                 continue
             all_txn_ids.append(txn.id)
-            payload = _build_payload(session, txn)
+            payload = build_transaction_payload(session, txn)
             if not payload_transfer_like(payload):
                 continue
             transfer_like_rows.append(
@@ -162,9 +168,9 @@ def rebuild(transaction_ids: list[int]) -> dict[str, Any]:
         try:
             with session_scope() as session:
                 txn = session.execute(select(Transaction).where(Transaction.id == txn_id)).scalar_one_or_none()
-                if not txn or _is_legacy_opening(txn.description, txn.notes, txn.payee):
+                if not txn or is_legacy_opening_transaction(txn.description, txn.notes, txn.payee):
                     continue
-                payload = _build_payload(session, txn)
+                payload = build_transaction_payload(session, txn)
                 result = classify_payload(session, payload)
                 apply_classification(session, txn.id, result)
                 if result.get("category_id"):
