@@ -1,3 +1,5 @@
+import { BudgetCellLimitNotice } from "./BudgetCellLimitNotice";
+import { BudgetCellSchedule } from "./BudgetCellSchedule";
 import { BudgetCurrentMonthChartSection } from "./sections/BudgetCurrentMonthChartSection";
 import { BudgetMatrixDrilldownSection } from "./sections/BudgetMatrixDrilldownSection";
 import { BudgetMatrixTableSection } from "./sections/BudgetMatrixTableSection";
@@ -14,6 +16,8 @@ export function BudgetsView({ model }: { model: any }) {
         <BudgetCurrentMonthChartSection model={model} />
         <BudgetMatrixTableSection model={model} />
         <BudgetMatrixDrilldownSection model={model} />
+        {model.cellLimitNotice && <BudgetCellLimitNotice model={model} />}
+        {model.cellSchedule && <BudgetCellSchedule key={`${model.cellSchedule.rowId}-${model.cellSchedule.month}`} model={model} />}
       </div>
     </div>
   );

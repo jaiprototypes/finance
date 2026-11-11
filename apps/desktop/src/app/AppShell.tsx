@@ -21,6 +21,15 @@ export default function AppShell() {
     return <PlaidOAuthRedirectHandler />;
   }
 
+  // Remember navigation width locally without adding a backend preference.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebarCollapsed") === "true"; } catch { return false; }
+  });
+  const toggleSidebar = () => setSidebarCollapsed(current => {
+    try { localStorage.setItem("sidebarCollapsed", String(!current)); } catch { /* Storage may be unavailable. */ }
+    return !current;
+  });
+  const [budgetOpened, setBudgetOpened] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState("home");
   const [workspaceView, setWorkspaceView] = useState<Record<string, string>>(defaultWorkspaceView);
   const [accountFocus, setAccountFocus] = useState("");
@@ -94,6 +103,8 @@ export default function AppShell() {
   const activePageId = resolveBucketPageId(activeBucket, workspaceView);
   const activePage = pageById.get(activePageId) || pageById.get(activeBucket.defaultPage) || pages[0];
 
+  useEffect(() => { if (activePageId === "budgets") setBudgetOpened(true); }, [activePageId]);
+
   const openWorkspace = (workspaceId: string) => {
     const bucket = navBuckets.find((item) => item.id === workspaceId);
     if (!bucket) return;
@@ -122,6 +133,7 @@ export default function AppShell() {
 
   const renderPage = (pageId: string) =>
     renderFeaturePage(pageId, {
+      budgetActive: activePageId === "budgets",
       accountFocus,
       companyLogoSrc: logoSrc,
       onConsumeAccountFocus: () => setAccountFocus(""),
@@ -133,8 +145,14 @@ export default function AppShell() {
     });
 
   return (
-    <div className="app">
+    <div className={sidebarCollapsed ? "app app--sidebar-collapsed" : "app"}>
       <aside className="sidebar">
+        <button type="button" className="sidebar-toggle" onClick={toggleSidebar}
+          aria-expanded={!sidebarCollapsed} aria-controls="main-navigation"
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+          {sidebarCollapsed ? "»" : "«"}
+        </button>
         <div className="brand">
           <div className="brand-logo custom-logo">
             <img
@@ -151,13 +169,16 @@ export default function AppShell() {
             <div className="brand-sub">Personal + business finance</div>
           </div>
         </div>
-        <nav className="nav">
+        <nav className="nav" id="main-navigation" aria-label="Main navigation">
           {navBuckets.map((bucket) => (
             <button
               key={bucket.id}
+              title={bucket.label}
+              aria-label={bucket.label}
               className={activeWorkspace === bucket.id ? "nav-workspace active" : "nav-workspace"}
               onClick={() => openWorkspace(bucket.id)}
             >
+              <span className="nav-workspace-short" aria-hidden="true">{bucket.label.slice(0, 1)}</span>
               <span className="nav-workspace-label">{bucket.label}</span>
               <span className="nav-workspace-meta">{bucket.summary}</span>
             </button>
@@ -175,22 +196,23 @@ export default function AppShell() {
           )}
         </div>
         {backendReady ? (
-          activeWorkspace === "home" ? (
-            <>{renderPage(activePageId)}</>
-          ) : (
-            <WorkspaceShell
-              bucketLabel={activeBucket.label}
-              bucketSummary={activeBucket.summary}
-              pages={activeBucket.pages.map((pageId) => pageById.get(pageId)).filter(Boolean)}
-              activePageId={activePageId}
-              activePage={activePage}
-              focusCopy={PAGE_FOCUS_COPY[activePageId] || activePage.meta}
-              onSelect={navigateToPage}
-              overview={renderWorkspaceOverview(activeBucket.id, activePageId, navigateToPage)}
-            >
-              {renderPage(activePageId)}
-            </WorkspaceShell>
-          )
+          <WorkspaceShell
+            showHeader={activeWorkspace !== "home"}
+            bucketLabel={activeBucket.label}
+            bucketSummary={activeBucket.summary}
+            pages={activeBucket.pages.map((pageId) => pageById.get(pageId)).filter(Boolean)}
+            activePageId={activePageId}
+            activePage={activePage}
+            focusCopy={PAGE_FOCUS_COPY[activePageId] || activePage.meta}
+            onSelect={navigateToPage}
+            overview={activeWorkspace === "home" ? null : renderWorkspaceOverview(activeBucket.id, activePageId, navigateToPage)}
+          >
+            {/* Retain budget data, drafts and the visible window across page navigation. */}
+            <div hidden={activePageId !== "budgets"}>
+              {(budgetOpened || activePageId === "budgets") && renderPage("budgets")}
+            </div>
+            {activePageId !== "budgets" && renderPage(activePageId)}
+          </WorkspaceShell>
         ) : (
           <div className="backend-loading-card">
             <h2>Connecting to local backend</h2>

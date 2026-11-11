@@ -24,6 +24,7 @@ export type NavBucket = { id: string; label: string; summary: string; pages: str
 type WorkspaceDefinition = NavBucket & { defaultPage: string };
 
 export type FeatureRenderContext = {
+  budgetActive?: boolean;
   accountFocus: string;
   companyLogoSrc: string;
   onConsumeAccountFocus: () => void;
@@ -116,7 +117,7 @@ export const featureManifests: FrontendFeatureManifest[] = [
     meta: "Plan",
     workspace: "planning",
     focusCopy: "Work the plan at the month level first, then drill into variance and category pressure.",
-    render: () => <Budgets />
+    render: ({ budgetActive }) => <Budgets active={budgetActive} />
   },
   {
     id: "debts",

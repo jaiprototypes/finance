@@ -9,7 +9,7 @@ from .models import BudgetBucketTarget, BudgetMonth
 from ..connectors.models import PlaidItem, UpAccount
 from .schemas import BudgetBucketTargetCreate, BudgetBucketTargetOut, BudgetMonthCreate
 from ..receivables.service import ReceivableTrackingService
-from .service import BUDGET_CASH_TOLERANCE, budget_matrix_snapshot, month_state
+from .service import month_state
 from ..taxonomy.service import list_budget_buckets, require_budget_bucket
 from ..connectors.plaid_client import is_configured as plaid_is_configured, sync_transactions as sync_plaid_transactions
 from ..connectors.up_client import (
@@ -100,47 +100,18 @@ def _require_budget_month(session: Session, budget_month_id: int) -> BudgetMonth
     return month
 
 
-def _validate_bucket_target_constraints(
-    session: Session,
-    budget_month_id: int,
-    bucket_key: str,
-    amount: float,
-    previous_bucket_key: str | None = None,
-    clear_current: bool = False,
-) -> None:
+def _require_editable_budget_month(session: Session, budget_month_id: int) -> BudgetMonth:
+    """Lock past actuals without treating a recorded budget deficit as bank cash."""
     month = _require_budget_month(session, budget_month_id)
-    month_label = str(month.month)
-    if month_state(month_label) == "past":
+    if month_state(str(month.month)) == "past":
         raise HTTPException(status_code=400, detail="Past months are locked and cannot be edited.")
-    clear_keys: set[tuple[str, str]] = set()
-    overrides = {}
-    if clear_current:
-        clear_keys.add((bucket_key, month_label))
-    else:
-        overrides[(bucket_key, month_label)] = float(amount or 0.0)
-    if previous_bucket_key and previous_bucket_key != bucket_key:
-        clear_keys.add((previous_bucket_key, month_label))
-    snapshot = budget_matrix_snapshot(session, int(month_label[:4]), overrides=overrides, clear_keys=clear_keys)
-    month_meta = snapshot.get("month_meta") or {}
-    failing = next(
-        (
-            (snapshot_month, data)
-            for snapshot_month, data in sorted(month_meta.items())
-            if month_state(snapshot_month) != "past"
-            and float(data.get("cumulative_cashflow") or 0.0) < -BUDGET_CASH_TOLERANCE - 0.005
-        ),
-        None,
-    )
-    if failing:
-        failing_month, data = failing
-        closing_balance = float(data.get("cumulative_cashflow") or 0.0)
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"{failing_month} projected closing checking balance ({closing_balance:.2f} {snapshot.get('base_currency')}) "
-                f"cannot go below the allowed buffer (-{BUDGET_CASH_TOLERANCE:.2f} {snapshot.get('base_currency')})."
-            ),
-        )
+    return month
+
+
+def _validate_target_date(payload: BudgetBucketTargetCreate, month: BudgetMonth) -> None:
+    """A cell's payment or income date must belong to that cell's calendar month."""
+    if payload.due_date and payload.due_date[:7] != str(month.month):
+        raise HTTPException(status_code=400, detail="The date must be within the cell's month.")
 
 
 @router.get("")
@@ -169,6 +140,8 @@ def list_budget_bucket_targets(budget_month_id: int | None = None, session: Sess
                 "budget_bucket": target.budget_bucket,
                 "amount": target.amount,
                 "rollover_amount": target.rollover_amount,
+                "due_date": target.due_date,
+                "future_cost": bool(target.future_cost),
                 "bucket_name": bucket.name,
                 "name": bucket.name,
                 "type": bucket.type,
@@ -204,7 +177,7 @@ def create_budget_month(payload: BudgetMonthCreate, session: Session = Depends(g
     return month
 
 
-@router.post("/bucket-targets")
+@router.post("/bucket-targets", response_model=BudgetBucketTargetOut)
 def create_budget_bucket_target(payload: BudgetBucketTargetCreate, session: Session = Depends(get_session)):
     _require_recent_bank_refresh(session)
     if payload.amount < 0:
@@ -215,7 +188,8 @@ def create_budget_bucket_target(payload: BudgetBucketTargetCreate, session: Sess
         bucket = require_budget_bucket(payload.budget_bucket)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    _validate_bucket_target_constraints(session, payload.budget_month_id, bucket.key, payload.amount)
+    month = _require_editable_budget_month(session, payload.budget_month_id)
+    _validate_target_date(payload, month)
     existing = session.execute(
         select(BudgetBucketTarget).where(
             BudgetBucketTarget.budget_month_id == payload.budget_month_id,
@@ -225,6 +199,10 @@ def create_budget_bucket_target(payload: BudgetBucketTargetCreate, session: Sess
     if existing:
         existing.amount = payload.amount
         existing.rollover_amount = payload.rollover_amount
+        if "due_date" in payload.model_fields_set:
+            existing.due_date = payload.due_date
+        if "future_cost" in payload.model_fields_set:
+            existing.future_cost = int(payload.future_cost)
         session.commit()
         return existing
     target = BudgetBucketTarget(
@@ -232,13 +210,15 @@ def create_budget_bucket_target(payload: BudgetBucketTargetCreate, session: Sess
         budget_bucket=bucket.key,
         amount=payload.amount,
         rollover_amount=payload.rollover_amount,
+        due_date=payload.due_date,
+        future_cost=int(payload.future_cost),
     )
     session.add(target)
     session.commit()
     return target
 
 
-@router.post("/bucket-targets/{target_id}")
+@router.post("/bucket-targets/{target_id}", response_model=BudgetBucketTargetOut)
 def update_budget_bucket_target(target_id: int, payload: BudgetBucketTargetCreate, session: Session = Depends(get_session)):
     _require_recent_bank_refresh(session)
     target = session.execute(
@@ -254,17 +234,16 @@ def update_budget_bucket_target(target_id: int, payload: BudgetBucketTargetCreat
         bucket = require_budget_bucket(payload.budget_bucket)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    _validate_bucket_target_constraints(
-        session,
-        payload.budget_month_id,
-        bucket.key,
-        payload.amount,
-        previous_bucket_key=str(target.budget_bucket),
-    )
+    month = _require_editable_budget_month(session, payload.budget_month_id)
+    _validate_target_date(payload, month)
     target.budget_month_id = payload.budget_month_id
     target.budget_bucket = bucket.key
     target.amount = payload.amount
     target.rollover_amount = payload.rollover_amount
+    if "due_date" in payload.model_fields_set:
+        target.due_date = payload.due_date
+    if "future_cost" in payload.model_fields_set:
+        target.future_cost = int(payload.future_cost)
     session.commit()
     return target
 
@@ -277,16 +256,7 @@ def delete_budget_bucket_target(target_id: int, session: Session = Depends(get_s
     ).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail="Budget bucket target not found")
-    month = _require_budget_month(session, int(target.budget_month_id))
-    if month_state(str(month.month)) == "past":
-        raise HTTPException(status_code=400, detail="Past months are locked and cannot be edited.")
-    _validate_bucket_target_constraints(
-        session,
-        int(target.budget_month_id),
-        str(target.budget_bucket),
-        0.0,
-        clear_current=True,
-    )
+    _require_editable_budget_month(session, int(target.budget_month_id))
     session.delete(target)
     session.commit()
     return {"status": "ok"}

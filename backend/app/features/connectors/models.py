@@ -82,6 +82,11 @@ class UpTransaction(Base):
     status = Column(String)
     up_category_id = Column(String)
     up_category_name = Column(String)
+    round_up_amount = Column(Float, default=0.0, nullable=False)
+    cashback_amount = Column(Float, default=0.0, nullable=False)
+    transfer_account_id = Column(String)
+    settled_at = Column(String)
+    cash_metadata_synced_at = Column(String)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
 

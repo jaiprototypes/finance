@@ -444,6 +444,7 @@ export function SectionHeader({ title, subtitle }: { title: string; subtitle?: s
 }
 
 export function WorkspaceShell({
+  showHeader = true,
   bucketLabel,
   bucketSummary,
   pages,
@@ -454,6 +455,7 @@ export function WorkspaceShell({
   overview,
   children
 }: {
+  showHeader?: boolean;
   bucketLabel: string;
   bucketSummary: string;
   pages: Array<{ id: string; label: string; meta: string } | undefined>;
@@ -466,8 +468,8 @@ export function WorkspaceShell({
 }) {
   const visiblePages = pages.filter((page): page is { id: string; label: string; meta: string } => Boolean(page));
   return (
-    <div className="workspace-shell">
-      <div className="workspace-bar">
+    <div className={showHeader ? "workspace-shell" : "workspace-shell workspace-shell--home"}>
+      {showHeader && <div className="workspace-bar">
         <div className="workspace-copy">
           <div className="workspace-kicker">{bucketLabel}</div>
           <div className="workspace-summary">{bucketSummary}</div>
@@ -488,7 +490,7 @@ export function WorkspaceShell({
             </button>
           ))}
         </div>
-      </div>
+      </div>}
       {overview}
       {children}
     </div>

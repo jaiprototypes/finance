@@ -11,7 +11,7 @@ export function createBudgetSubcategoryRenderers({
   hasSubcategoryRows,
   isMatrixRowExpanded,
   matrixBusy,
-  matrixMonths,
+  visibleMatrixMonths,
   matrixSubcategoryDrafts,
   matrixSubcategoryRenameValues,
   openMatrixDrilldown,
@@ -30,7 +30,7 @@ export function createBudgetSubcategoryRenderers({
   hasSubcategoryRows: (row: any) => boolean;
   isMatrixRowExpanded: (rowId: string) => boolean;
   matrixBusy: boolean;
-  matrixMonths: string[];
+  visibleMatrixMonths: string[];
   matrixSubcategoryDrafts: StringMap;
   matrixSubcategoryRenameValues: StringMap;
   openMatrixDrilldown: (event: MouseEvent, row: any, month: string, options?: { subcategory?: any }) => void;
@@ -45,8 +45,10 @@ export function createBudgetSubcategoryRenderers({
     if (!hasSubcategoryRows(row) || !isMatrixRowExpanded(String(row.id))) return null;
     return (row.subcategories || []).map((subcategory: any) => {
       const renameKey = String(subcategory.subcategory_id || "");
-      const isRenaming = Boolean(subcategory.subcategory_id) && editingMatrixSubcategoryId === renameKey;
-      const actualTotal = matrixMonths.reduce(
+      // Provider allocations can be inspected, but are not editable taxonomy records.
+      const readOnly = Boolean(row.read_only || subcategory.read_only);
+      const isRenaming = !readOnly && Boolean(subcategory.subcategory_id) && editingMatrixSubcategoryId === renameKey;
+      const actualTotal = visibleMatrixMonths.reduce(
         (sum, month) =>
           sum + Number((subcategory.type === "income" ? subcategory.income?.[month] : subcategory.expense?.[month]) || 0),
         0
@@ -86,7 +88,7 @@ export function createBudgetSubcategoryRenderers({
               ) : (
                 <>
                   <span>{subcategory.name}</span>
-                  {subcategory.subcategory_id && !subcategory.is_unassigned && (
+                  {!readOnly && subcategory.subcategory_id && !subcategory.is_unassigned && (
                     <>
                       <button
                         className="matrix-subcategory-action"
@@ -113,7 +115,7 @@ export function createBudgetSubcategoryRenderers({
               )}
             </div>
           </td>
-          {matrixMonths.map((month) => {
+          {visibleMatrixMonths.map((month) => {
             const actual = Number(
               (subcategory.type === "income" ? subcategory.income?.[month] : subcategory.expense?.[month]) || 0
             );
@@ -124,21 +126,18 @@ export function createBudgetSubcategoryRenderers({
                 onContextMenu={(event) => openMatrixDrilldown(event, row, month, { subcategory })}
                 title="Right-click to inspect transactions behind this subcategory actual"
               >
-                {actual > 0 ? renderMatrixMoney(actual, budgetCurrency) : "—"}
+                {actual !== 0 ? renderMatrixMoney(actual, budgetCurrency) : "—"}
               </td>
             );
           })}
-          <td className="matrix-total-cell">—</td>
-          <td className="matrix-total-cell">{renderMatrixMoney(actualTotal, budgetCurrency)}</td>
-          <td className="matrix-total-cell">—</td>
-          <td className="matrix-action-cell">—</td>
+          <td className="matrix-total-cell"><span className="muted">Actual average </span>{renderMatrixMoney(actualTotal / (visibleMatrixMonths.length || 1), budgetCurrency)}<span className="muted"> / month</span></td>
         </tr>
       );
     });
   };
 
   const renderInlineSubcategoryEditor = (row: any) => {
-    if (addingMatrixSubcategoryFor !== String(row.id)) return null;
+    if (row.read_only || addingMatrixSubcategoryFor !== String(row.id)) return null;
     return (
       <div className="matrix-inline-subcategory-editor">
         <input

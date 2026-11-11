@@ -1,64 +1,112 @@
+import { BudgetCashAccounts, formatCashSnapshot } from "../BudgetCashAccounts";
+
+/** Present reconciled cash, remaining plans and optional spending details. */
 export function BudgetCurrentMonthChartSection({ model }: { model: any }) {
   const {
     budgetCurrency,
     currentBudgetMonth,
-    currentMonthChartGradient,
-    currentMonthExpenseBreakdown,
-    currentMonthOverrun,
-    currentMonthRemaining,
+    summaryMonth,
+    summaryChartGradient,
+    cashSummary: cash,
+    cashFlow,
+    periodExpenseBreakdown,
     formatCompactCurrency,
     formatCurrency,
     formatMonthYearLabel,
-    matrixMonths,
-    plannedIncomeExpansion,
-    remainingActualIncome
+    matrixMonths
   } = model;
 
-  if (!matrixMonths.includes(currentBudgetMonth)) {
-    return null;
-  }
+  if (!cash) return null;
+  const historical = summaryMonth < currentBudgetMonth;
+  const amount = (value: number | null) => value == null ? "—" : formatCurrency(value, budgetCurrency);
+  const firstSnapshot = formatCashSnapshot(cash.asOf);
+  const lastSnapshot = formatCashSnapshot(cash.latestAsOf);
+  const snapshotLabel = firstSnapshot === lastSnapshot ? firstSnapshot : `${firstSnapshot} – ${lastSnapshot}`;
+  const cashLeft = historical ? cash.closing : cash.projectedClosing;
+  const hasProjection = cash.projectedClosing !== null && (Math.abs(cash.planChange || 0) >= 0.005 || cash.reservedSavings > 0);
 
   return (
     <div className="matrix-chart-card">
       <div
         className="matrix-chart-visual"
-        style={{ backgroundImage: currentMonthChartGradient }}
-        aria-label={`Current month budget chart for ${formatMonthYearLabel(currentBudgetMonth)}`}
+        style={{ backgroundImage: summaryChartGradient }}
+        aria-label={`Cash and categorized spending through ${formatMonthYearLabel(summaryMonth)}`}
       >
         <div className="matrix-chart-center">
-          <span className="matrix-chart-caption">{formatMonthYearLabel(currentBudgetMonth)}</span>
-          <strong>
-            {currentMonthOverrun > 0
-              ? formatCompactCurrency(currentMonthOverrun, budgetCurrency)
-              : formatCompactCurrency(currentMonthRemaining, budgetCurrency)}
-          </strong>
-          <span className="matrix-chart-caption">
-            {currentMonthOverrun > 0 ? "Over current income" : "Remaining"}
-          </span>
+          <span className="matrix-chart-caption">{formatMonthYearLabel(summaryMonth)}</span>
+          <strong>{cashLeft == null ? "—" : Math.abs(cashLeft) < 1000
+            ? formatCurrency(cashLeft, budgetCurrency) : formatCompactCurrency(cashLeft, budgetCurrency)}</strong>
+          <span className="matrix-chart-caption">{cashLeft == null ? "Cash unavailable" : historical ? "Recorded cash" : "Cash after plans"}</span>
         </div>
       </div>
       <div className="matrix-chart-copy">
-        <strong>Current month income use</strong>
+        <strong>{historical ? "Historical cash reconstruction" : "Cash left after plans"}</strong>
         <p className="muted">
-          Actual income sets the base, planned income expands it temporarily, and current expense shows what has already been used.
+          {formatMonthYearLabel(matrixMonths[0])} through {formatMonthYearLabel(summaryMonth)}.
+          {" "}Includes borrowing and all activity in these personal cash accounts, regardless of budget category.
         </p>
         <div className="matrix-chart-legend">
           <div className="matrix-chart-legend-item">
-            <span className="matrix-chart-swatch matrix-chart-swatch-actual" />
-            <span>Actual income remaining</span>
-            <strong>{formatCurrency(remainingActualIncome, budgetCurrency)}</strong>
+            <span className="matrix-chart-swatch matrix-chart-swatch-total" />
+            <span>Opening cash (reconstructed)</span>
+            <strong>{amount(cash.opening)}</strong>
           </div>
           <div className="matrix-chart-legend-item">
-            <span className="matrix-chart-swatch matrix-chart-swatch-planned" />
-            <span>Planned income</span>
-            <strong>{formatCurrency(plannedIncomeExpansion, budgetCurrency)}</strong>
+            <span className="matrix-chart-swatch matrix-chart-swatch-actual" />
+            <span>Money received</span>
+            <strong>{amount(cash.received)}</strong>
           </div>
+          <div className="matrix-chart-legend-item">
+            <span className="matrix-chart-swatch matrix-chart-swatch-used" />
+            <span>Paid or reserved</span>
+            <strong>{amount(cash.paid)}</strong>
+          </div>
+          {Math.abs(cash.transferAdjustment || 0) >= 0.005 && (
+            <div className="matrix-chart-legend-item">
+              <span className="matrix-chart-swatch matrix-chart-swatch-planned" />
+              <span>Transfer timing and currency difference</span>
+              <strong>{amount(cash.transferAdjustment)}</strong>
+            </div>
+          )}
+          <div className="matrix-chart-legend-item">
+            <span className="matrix-chart-swatch matrix-chart-swatch-actual" />
+            <span>Available cash</span>
+            <strong>{amount(cash.closing)}</strong>
+          </div>
+          {cash.reservedSavings > 0 && <div className="matrix-chart-legend-item">
+            <span className="matrix-chart-swatch matrix-chart-swatch-planned" />
+            <span>Planned Savings protected from spending</span>
+            <strong>{amount(cash.reservedSavings)}</strong>
+          </div>}
+          {hasProjection && (
+            <div className="matrix-chart-legend-item">
+              <span className="matrix-chart-swatch matrix-chart-swatch-planned" />
+              <span>Estimated cash after remaining plans</span>
+              <strong>{amount(cash.projectedClosing)}</strong>
+            </div>
+          )}
         </div>
-        <div className="matrix-chart-breakdown">
-          <strong>Current expense categories</strong>
-          {currentMonthExpenseBreakdown.length > 0 ? (
+        {cash.pending !== 0 && (
+          <p className="muted">
+            {amount(Math.abs(cash.pending))} in pending {cash.pending < 0 ? "reservations" : "receipts"} is already included in cash.
+          </p>
+        )}
+        {cash.opening == null && (
+          <p className="muted">Opening cash is unavailable where linked account history does not cover the start of this period.</p>
+        )}
+        {hasProjection && <p className="muted">Plans add only amounts not already recorded or reserved. Planned Savings reduce spendable cash without changing your combined bank balance.</p>}
+        {Math.abs(cash.transferAdjustment || 0) >= 0.005 && <p className="muted">
+          Transfers between these accounts are excluded from money received and paid. Differences in bank posting dates or currencies appear separately above.
+        </p>}
+        <p className="muted">
+          {historical ? "Reconstructed using bank snapshots: " : "Bank snapshots: "}{snapshotLabel}.
+        </p>
+        <BudgetCashAccounts accounts={cashFlow?.accounts || []} formatCurrency={formatCurrency} />
+        <details className="budget-cash-details">
+          <summary>Spending by budget category</summary>
+          {periodExpenseBreakdown.length > 0 ? (
             <div className="matrix-chart-breakdown-list">
-              {currentMonthExpenseBreakdown.map((row: any) => (
+              {periodExpenseBreakdown.map((row: any) => (
                 <div key={`breakdown-${row.id}`} className="matrix-chart-breakdown-item">
                   <span className="matrix-chart-swatch" style={{ background: row.color }} />
                   <span>{row.name}</span>
@@ -68,15 +116,9 @@ export function BudgetCurrentMonthChartSection({ model }: { model: any }) {
               ))}
             </div>
           ) : (
-            <p className="muted">No current month expense categories yet.</p>
+            <p className="muted">No spending recorded in the selected period.</p>
           )}
-        </div>
-        {currentMonthOverrun > 0 && (
-          <p className="form-error">
-            Current expense is {formatCurrency(currentMonthOverrun, budgetCurrency)} above actual plus planned income for{" "}
-            {formatMonthYearLabel(currentBudgetMonth)}.
-          </p>
-        )}
+        </details>
       </div>
     </div>
   );

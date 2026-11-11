@@ -22,7 +22,7 @@ python -m PyInstaller \
   --hidden-import passlib.handlers.argon2 \
   --hidden-import argon2 \
   --hidden-import argon2.low_level \
-  --add-data "$ROOT_DIR/backend/app/migrations/sql:app/migrations/sql" \
+  --add-data "$ROOT_DIR/backend/app/migrations/sql:backend/app/migrations/sql" \
   --add-data "$ROOT_DIR/backend/app/assets:app/assets" \
   --distpath "$ROOT_DIR/dist" \
   backend/main.py

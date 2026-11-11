@@ -1,4 +1,5 @@
 import React, { Fragment, useEffect, useRef, useState } from "react";
+import { ObservedAccountBalance } from "../../shared/ObservedAccountBalance";
 import { getFeatureData, featureUrl } from "./api";
 import {
   BoxTitle,
@@ -86,9 +87,9 @@ export function Dashboard() {
   });
   const latestMonth = Array.from(cashflowByMonth.keys()).sort().pop();
   const latestCashflowRows = latestMonth ? cashflowByMonth.get(latestMonth) || [] : [];
-  const balanceMap = new Map<number, number>();
+  const balanceMap = new Map<number, number | null>();
   (netWorth?.accounts || []).forEach((row: any) =>
-    balanceMap.set(row.account_id, Number(row.balance_base ?? row.balance ?? 0))
+    balanceMap.set(row.account_id, ObservedAccountBalance.base(row))
   );
   const currentBudgetMonth = budgetMatrixOverview?.current_month || currentMonthLabel();
   const currentBudgetMeta = budgetMatrixOverview?.month_meta?.[currentBudgetMonth] || null;
@@ -101,6 +102,7 @@ export function Dashboard() {
   const personalCheckingCount = netWorth?.personal_checking_account_count ?? netWorth?.checking_account_count ?? 0;
   const businessCheckingCount = netWorth?.business_checking_account_count ?? 0;
   const debtTotal = debtProfiles.reduce((sum, profile) => sum + Math.abs(balanceMap.get(profile.account_id) || 0), 0);
+  const unknownDebts = debtProfiles.filter((profile) => balanceMap.get(profile.account_id) == null).length;
   const runningEntry = entries.find((entry) => !entry.end_time);
   const openInvoices = invoices.filter((invoice) => !isClosedReceivableStatus(invoice.status));
   const openInvoiceTotal = openInvoices.reduce(
@@ -197,9 +199,9 @@ export function Dashboard() {
           </span>
         </div>
         <div className="card">
-          <BoxTitle title="Debt outstanding" variant="card" />
+          <BoxTitle title={unknownDebts ? "Known debt balances" : "Debt outstanding"} variant="card" />
           <p className="metric">{formatCurrency(debtTotal, dashboardCurrency)}</p>
-          <span className="muted">{debtProfiles.length} active debts</span>
+          <span className="muted">{debtProfiles.length} active debts{unknownDebts ? ` · ${unknownDebts} balances unavailable` : ""}</span>
         </div>
         <div className="card">
           <BoxTitle title="Open invoices" variant="card" />

@@ -9,12 +9,13 @@ INCOME_CATEGORY_NAME = "Income"
 BUSINESS_CATEGORY_NAME = "Business"
 HOUSING_BILLS_CATEGORY_NAME = "Housing & Bills"
 FOOD_CATEGORY_NAME = "Food"
-TRANSPORT_CATEGORY_NAME = "Transport"
+TRANSPORT_CATEGORY_NAME = "Travel & Transport"
 HEALTH_CATEGORY_NAME = "Health"
 LIFESTYLE_CATEGORY_NAME = "Lifestyle"
 DEBT_CATEGORY_NAME = "Debt"
 SAVINGS_CATEGORY_NAME = "Savings"
 CASH_ATM_CATEGORY_NAME = "Cash & ATM"
+BANK_FEES_CATEGORY_NAME = "Bank Fees"
 STAFFING_CATEGORY_NAME = BUSINESS_CATEGORY_NAME
 
 ACTIVE_CATEGORY_NAMES = (
@@ -28,6 +29,7 @@ ACTIVE_CATEGORY_NAMES = (
     DEBT_CATEGORY_NAME,
     SAVINGS_CATEGORY_NAME,
     CASH_ATM_CATEGORY_NAME,
+    BANK_FEES_CATEGORY_NAME,
     TRANSFER_CATEGORY_NAME,
     FRIENDS_CATEGORY_NAME,
 )
@@ -35,6 +37,9 @@ BROAD_BUDGET_CATEGORIES = ACTIVE_CATEGORY_NAMES
 INCOME_CATEGORY_NAMES = (INCOME_CATEGORY_NAME, BUSINESS_CATEGORY_NAME)
 
 CATEGORY_ALIAS_MAP = {
+    "bank fee": BANK_FEES_CATEGORY_NAME,
+    "bank fees": BANK_FEES_CATEGORY_NAME,
+    "bank fees and charges": BANK_FEES_CATEGORY_NAME,
     "adult": LIFESTYLE_CATEGORY_NAME,
     "apps games software": LIFESTYLE_CATEGORY_NAME,
     "atm": CASH_ATM_CATEGORY_NAME,
@@ -68,6 +73,9 @@ CATEGORY_ALIAS_MAP = {
     "holidays travel": TRANSPORT_CATEGORY_NAME,
     "homeware appliances": HOUSING_BILLS_CATEGORY_NAME,
     "income contractor": INCOME_CATEGORY_NAME,
+    "income other": INCOME_CATEGORY_NAME,
+    # Bank-provided tax refunds belong with other personal budget inflows.
+    "income tax refund": INCOME_CATEGORY_NAME,
     "internet": HOUSING_BILLS_CATEGORY_NAME,
     "investment proceeds": INCOME_CATEGORY_NAME,
     "investments": SAVINGS_CATEGORY_NAME,
@@ -96,6 +104,7 @@ CATEGORY_ALIAS_MAP = {
     "transportation taxis and ride shares": TRANSPORT_CATEGORY_NAME,
     "transit": TRANSPORT_CATEGORY_NAME,
     "travel": TRANSPORT_CATEGORY_NAME,
+    "travel transport": TRANSPORT_CATEGORY_NAME,
     "tv music streaming": LIFESTYLE_CATEGORY_NAME,
     "utilities": HOUSING_BILLS_CATEGORY_NAME,
 }
@@ -140,11 +149,13 @@ BUDGET_BUCKETS = (
     BudgetBucket("income", "Income", "income", 0),
     BudgetBucket("housing_bills", "Housing & Bills", "expense", 10),
     BudgetBucket("food", "Food", "expense", 20),
-    BudgetBucket("transport", "Transport", "expense", 30),
+    BudgetBucket("transport", TRANSPORT_CATEGORY_NAME, "expense", 30),
     BudgetBucket("health", "Health", "expense", 40),
     BudgetBucket("lifestyle", "Lifestyle", "expense", 50),
     BudgetBucket("debt", "Debt", "expense", 60),
     BudgetBucket("savings", "Savings", "expense", 70),
+    BudgetBucket("friends_family", FRIENDS_CATEGORY_NAME, "expense", 80),
+    BudgetBucket("bank_fees", BANK_FEES_CATEGORY_NAME, "expense", 90),
 )
 BUDGET_BUCKETS_BY_KEY = {bucket.key: bucket for bucket in BUDGET_BUCKETS}
 
@@ -156,6 +167,7 @@ _BUCKET_KEY_BY_CATEGORY = {
     "Food": "food",
     "Food & Dining": "food",
     "Transport": "transport",
+    TRANSPORT_CATEGORY_NAME: "transport",
     "Health": "health",
     "Health & Personal Care": "health",
     "Lifestyle": "lifestyle",
@@ -167,8 +179,10 @@ _BUCKET_KEY_BY_CATEGORY = {
     "Savings": "savings",
     "Savings & Investments": "savings",
     "Travel": "transport",
+    FRIENDS_CATEGORY_NAME: "friends_family",
+    BANK_FEES_CATEGORY_NAME: "bank_fees",
 }
-_EXCLUDED_CATEGORY_NAMES = {"Business", TRANSFER_CATEGORY_NAME, FRIENDS_CATEGORY_NAME, "Cash & ATM"}
+_EXCLUDED_CATEGORY_NAMES = {"Business", TRANSFER_CATEGORY_NAME, "Cash & ATM"}
 _HOUSING_HINTS = ("housing", "rent", "mortgage", "utility", "utilities", "internet", "phone", "mobile", "water", "energy", "electric", "gas", "insurance", "storage")
 _FOOD_HINTS = ("food", "grocery", "grocer", "restaurant", "cafe", "bar", "takeaway")
 _TRANSPORT_HINTS = ("transport", "fuel", "uber", "transit", "taxi", "ride share", "cycling", "travel", "holiday", "flight", "hotel", "airbnb", "booking")

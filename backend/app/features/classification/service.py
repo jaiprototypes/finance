@@ -7,8 +7,19 @@ from typing import Optional
 from sqlalchemy import select, text, or_
 from sqlalchemy.exc import OperationalError
 
+from ...core.bank_activity import BankFeeMatcher
 from ...core.classification_port import register_classification_port
 from ...core.ledger_filters import is_legacy_opening as _shared_is_legacy_opening
+from .agent import ClassificationAgent
+from .savings_transfers import SavingsTransferRule
+from .grab_spending import GrabSpendingRule
+from .university_funding import UniversityFundingRule
+from .employer_wages import ConfirmedEmployerRule
+from .merchant_subcategories import CarltonTobaccoRule, DebtMerchantRule, MERCHANT_SPENDING_RULES
+from .family_subcategories import FamilyCounterpartyRule
+from .food_subcategories import FoodSubcategoryRule
+from .paypal_activity import PayPalActivity
+from .yha_spending import YHALodgingRule, YHASpendingRule
 from .models import Rule, MerchantProfile, TransactionMemory, ClassificationAudit
 from ..ledger.models import Account, Transaction, TransactionSplit
 from ..taxonomy.models import Category
@@ -20,9 +31,10 @@ from ..fx.currency import (
 from ..ledger.account_roles import is_business_account
 from ..assistant.local_ai import LocalAIUnavailableError, call_local_json
 from ..settings.service import get_classification_model, get_local_ai_enabled, get_setting
-from ..taxonomy.subcategories import subcategory_name
+from ..taxonomy.subcategories import ensure_subcategory, subcategory_name
 from ..taxonomy.service import (
     ACTIVE_CATEGORY_NAMES,
+    BANK_FEES_CATEGORY_NAME,
     BROAD_BUDGET_CATEGORIES,
     BUSINESS_CATEGORY_NAME,
     CASH_ATM_CATEGORY_NAME,
@@ -520,12 +532,74 @@ def _has_directional_transfer_language(text: str) -> bool:
     return any(term in lowered for term in directional_terms)
 
 
+class _OwnedTransferEvidence:
+    """Require evidence from both bank records before matching an owned transfer."""
+
+    rail_merchants = {
+        "wise", "wise inc", "transferwise", "ofx", "revolut", "currencyfair",
+        "worldremit", "xoom", "remitly", "moneygram", "western union",
+    }
+
+    def __init__(self, session, payload: dict):
+        """Keep merchant identity separate from free-form memo text."""
+        self.text = _transaction_text(payload.get("payee"), payload.get("description"), payload.get("notes"))
+        self.normalized = normalize_merchant(self.text)
+        identity = _transaction_text(payload.get("payee"), payload.get("description"), None)
+        self.merchant = normalize_merchant(clean_merchant(payload.get("payee") or payload.get("description") or ""))
+        self.rail = self.merchant in self.rail_merchants
+        self.reviewed = _matches_transfer_rule(session, {
+            **payload, "merchant": clean_merchant(payload.get("payee") or payload.get("description") or ""),
+        })
+        self.owned_name = any(term in identity.lower() for term in
+                              TRANSFER_COUNTERPARTY_KEYWORDS + TRANSFER_OVERRIDE_KEYWORDS)
+        self.named_remittance = bool(re.search(r"[-/]\s*(?:wise|transferwise)\s*$", identity, re.I))
+        # Bank TFR references and Up's Cover entries are directional transfer evidence.
+        direction = re.search(r"\b(?:transfer|xfer|tfr|cover)\s+(to|from)\b", identity, re.I)
+        self.direction = direction.group(1).lower() if direction else None
+        self.bank_reference = bool(re.search(r"\btfr\s+(?:to|from)\s+ck\b", identity, re.I))
+
+    def _account_anchor(self, account_name: str) -> bool:
+        """An account name corroborates a transfer only with directional wording."""
+        name = normalize_merchant(account_name)
+        if not (self.direction and name and len(name) >= 4 and name in self.normalized):
+            return False
+        if name in ACCOUNT_NAME_STOPWORDS:
+            # Generic account names must identify the counterparty, not a retailer's memo.
+            return bool(self.merchant == name or re.match(
+                rf"^{self.direction} {re.escape(name)}(?: |$)", self.merchant))
+        return True
+
+    def supports(self, other, current_account_name: str, other_account_name: str) -> bool:
+        """Reject a retail transaction whose only evidence comes from its neighbor."""
+        current_anchor = self.reviewed or self.owned_name or self._account_anchor(other_account_name)
+        other_anchor = other.reviewed or other.owned_name or other._account_anchor(current_account_name)
+        current_evidence = current_anchor or self.bank_reference or self.rail
+        other_evidence = other_anchor or other.bank_reference or other.rail
+        if not current_evidence or not other_evidence:
+            return self._shared_named_counterparty(other)
+        if current_anchor or other_anchor:
+            return True
+        return bool(self.bank_reference and other.bank_reference
+                    and self.direction != other.direction)
+
+    def _shared_named_counterparty(self, other) -> bool:
+        """A named Wise remittance can corroborate the same name on the other side."""
+        shared_name = self.merchant and self.merchant == other.merchant
+        return bool(shared_name and self.merchant not in self.rail_merchants
+                    and _looks_like_person(self.merchant)
+                    and (self.named_remittance or other.named_remittance))
+
+
 def _find_opposite_transfer_account(session, payload: dict) -> Account | None:
     transaction_id = payload.get("transaction_id")
     account_id = payload.get("account_id")
     amount = payload.get("amount")
     currency = normalize_currency(payload.get("currency"))
     date_str = payload.get("date")
+    # Up's transferAccount relationship proves ownership without inventing an opposite row.
+    provider_account = _provider_transfer_account(session, payload)
+    if provider_account:
+        return provider_account
     if account_id is None or amount is None or not currency or not date_str:
         return None
     try:
@@ -546,10 +620,33 @@ def _find_opposite_transfer_account(session, payload: dict) -> Account | None:
     )
     if transaction_id:
         query = query.where(Transaction.id != int(transaction_id))
-    match = session.execute(query).scalars().first()
-    if not match:
+    matches = session.execute(query).scalars().all()
+    if not matches:
         return None
-    return _account_by_id(session, match.account_id)
+    current = _OwnedTransferEvidence(session, payload)
+    current_account_name = _account_name(session, account_id)
+    for match in matches:
+        account = _account_by_id(session, match.account_id)
+        opposite = _OwnedTransferEvidence(session, {
+            "description": match.description, "payee": match.payee, "notes": match.notes,
+        })
+        if account and current.supports(opposite, current_account_name, account.name or ""):
+            return account
+    return None
+
+
+def _provider_transfer_account(session, payload: dict) -> Account | None:
+    """Accept only an existing distinct local account in the transaction currency."""
+    try:
+        account_id = int(payload.get("owned_transfer_account_id"))
+        current_id = int(payload.get("account_id"))
+    except (TypeError, ValueError):
+        return None
+    account = _account_by_id(session, account_id)
+    if (not account or account.id == current_id or not _account_by_id(session, current_id)
+            or normalize_currency(account.currency) != normalize_currency(payload.get("currency"))):
+        return None
+    return account
 
 
 def _find_opposite_transfer(session, payload: dict) -> str | None:
@@ -572,14 +669,7 @@ def _find_cross_currency_transfer(session, payload: dict) -> dict | None:
         return None
     if source_currency not in {"USD", "AUD"}:
         return None
-    try:
-        fx_summary = get_aud_per_usd_for_date(session, txn_date)
-    except ValueError:
-        ensure_recent_fx_rates(session)
-        try:
-            fx_summary = get_aud_per_usd_for_date(session, txn_date)
-        except ValueError:
-            return None
+    fx_summary = None
 
     current_text = _transaction_text(
         payload.get("payee"),
@@ -593,15 +683,8 @@ def _find_cross_currency_transfer(session, payload: dict) -> dict | None:
     current_account_name = _account_name(session, account_id)
     current_account_normalized = normalize_merchant(current_account_name)
     rail_hit_current = _match_keyword(current_text.lower(), TRANSFER_RAIL_KEYWORDS)
-    current_reviewed_transfer = _matches_transfer_rule(
-        session,
-        {
-            "description": payload.get("description"),
-            "payee": payload.get("payee"),
-            "notes": payload.get("notes"),
-            "merchant": clean_merchant(payload.get("payee") or payload.get("description") or ""),
-        },
-    )
+    current_evidence = _OwnedTransferEvidence(session, payload)
+    current_reviewed_transfer = current_evidence.reviewed
 
     start = (txn_date - timedelta(days=3)).isoformat()
     end = (txn_date + timedelta(days=3)).isoformat()
@@ -633,19 +716,24 @@ def _find_cross_currency_transfer(session, payload: dict) -> dict | None:
         )
         candidate_account_name = _account_name(session, candidate.account_id)
         candidate_account_normalized = normalize_merchant(candidate_account_name)
+        candidate_evidence = _OwnedTransferEvidence(session, {
+            "description": candidate.description, "payee": candidate.payee, "notes": candidate.notes,
+        })
+        if not current_evidence.supports(candidate_evidence, current_account_name, candidate_account_name):
+            continue
         rail_hit_candidate = _match_keyword(candidate_text.lower(), TRANSFER_RAIL_KEYWORDS)
-        candidate_reviewed_transfer = False
-        if rail_hit_current or rail_hit_candidate:
-            candidate_reviewed_transfer = _matches_transfer_rule(
-                session,
-                {
-                    "description": candidate.description,
-                    "payee": candidate.payee,
-                    "notes": candidate.notes,
-                    "merchant": clean_merchant(candidate.payee or candidate.description or ""),
-                },
-            )
+        candidate_reviewed_transfer = candidate_evidence.reviewed
 
+        # Fetch FX only after both records provide transfer evidence.
+        if fx_summary is None:
+            try:
+                fx_summary = get_aud_per_usd_for_date(session, txn_date)
+            except ValueError:
+                ensure_recent_fx_rates(session)
+                try:
+                    fx_summary = get_aud_per_usd_for_date(session, txn_date)
+                except ValueError:
+                    return None
         try:
             expected_amount = abs(
                 convert_amount(
@@ -856,6 +944,19 @@ def _cash_atm_result(session, merchant_name: str, source: str, note: str | None 
     }
 
 
+def _bank_fee_result(session, merchant_name: str) -> dict:
+    """Keep separately posted bank fees out of cash withdrawals and income."""
+    return {
+        "category_id": _ensure_category(session, BANK_FEES_CATEGORY_NAME),
+        "category_name": BANK_FEES_CATEGORY_NAME,
+        "classification": "Personal",
+        "merchant_name": merchant_name,
+        "source": "bank_fee",
+        "skip_profile": True,
+        "skip_memory": True,
+    }
+
+
 def _debt_payment_result(session, merchant_name: str, source: str, note: str | None = None) -> dict:
     category_name = DEBT_CATEGORY_NAME
     category_id = _ensure_category(session, category_name)
@@ -866,6 +967,7 @@ def _debt_payment_result(session, merchant_name: str, source: str, note: str | N
         "merchant_name": merchant_name or category_name,
         "source": source,
         "note": note,
+        **DebtMerchantRule.detail(session, category_id, merchant_name),
     }
 
 
@@ -1002,6 +1104,14 @@ def _positive_inflow_override(
             "business_account_inflow",
             note="Positive inflow landed in a business-designated account",
         )
+    if ConfirmedEmployerRule.matches(amount, payee, description):
+        result = _income_result(
+            session, merchant_name, "confirmed_employer_wage",
+            note="Matched confirmed employment-wage payer",
+        )
+        # Direction-specific wages must not create a profile for outgoing payments.
+        result.update(skip_profile=True, skip_memory=True)
+        return result
     if any(term in combined_lower for term in INVESTMENT_PROCEEDS_KEYWORDS):
         return _investment_proceeds_result(
             session,
@@ -1258,14 +1368,18 @@ def build_transaction_payload(session, txn: Transaction) -> dict:
     up = session.execute(
         text(
             """
-            SELECT up_category_name, up_category_id
-            FROM up_transaction
-            WHERE transaction_id = :transaction_id
+            SELECT ut.up_category_name, ut.up_category_id,
+                   ua.account_id AS owned_transfer_account_id
+            FROM up_transaction ut
+            LEFT JOIN up_account ua ON ua.up_account_id = ut.transfer_account_id
+            WHERE ut.transaction_id = :transaction_id
             """
         ),
         {"transaction_id": txn.id},
     ).mappings().first()
     if up:
+        if up.get("owned_transfer_account_id"):
+            payload["owned_transfer_account_id"] = up.get("owned_transfer_account_id")
         if up.get("up_category_name"):
             payload["bank_category"] = up.get("up_category_name")
         elif up.get("up_category_id"):
@@ -1274,6 +1388,60 @@ def build_transaction_payload(session, txn: Transaction) -> dict:
 
 
 def classify_payload(session, payload: dict) -> dict:
+    """Preserve confirmed merchant details across every classification return path."""
+    result = _classify_payload(session, payload)
+    if result.get("subcategory_id") or result.get("classification") != "Personal":
+        return result
+    if result.get("category_name") == TRANSFER_CATEGORY_NAME:
+        name = SavingsTransferRule.name_for(session, payload)
+        if name:
+            detail = ensure_subcategory(session, result["category_id"], name)
+            result.update(subcategory_id=detail.id, subcategory_name=detail.name)
+    elif result.get("category_name") == DEBT_CATEGORY_NAME:
+        identity = " ".join([payload.get("payee") or "", payload.get("description") or ""])
+        result.update(DebtMerchantRule.detail(session, result["category_id"], identity))
+        if (not result.get("subcategory_id") and result.get("source") == "rule"
+                and PayPalActivity.present(payload.get("payee"), payload.get("description"))
+                and not re.search(r"\bpurchase\b|\*", identity, re.I)):
+            detail = ensure_subcategory(session, result["category_id"], "PayPal")
+            result.update(subcategory_id=detail.id, subcategory_name=detail.name)
+    elif result.get("category_name") == FRIENDS_CATEGORY_NAME:
+        result.update(FamilyCounterpartyRule.detail(
+            session, result["category_id"], payload.get("payee"), payload.get("description")))
+    elif (result.get("category_name") in {TRANSPORT_CATEGORY_NAME, LIFESTYLE_CATEGORY_NAME, HOUSING_BILLS_CATEGORY_NAME}
+          and not _is_business_account_id(session, payload.get("account_id"))):
+        # Earlier broad overrides retain their category while gaining the merchant detail.
+        for rule in MERCHANT_SPENDING_RULES:
+            if rule.category_name == result["category_name"] and rule.matches(
+                payload.get("amount"), payload.get("payee"), payload.get("description"),
+            ):
+                detail = ensure_subcategory(session, result["category_id"], rule.subcategory_name)
+                result.update(subcategory_id=detail.id, subcategory_name=detail.name)
+                break
+    elif result.get("category_name") == "Food":
+        detail = FoodSubcategoryRule.detail(session, result["category_id"], payload)
+        result.update(detail)
+        if not detail and float(payload.get("amount") or 0) < 0:
+            result["needs_review"] = True
+            result["note"] = "Insufficient evidence to choose a food subcategory"
+    # Early bank/merchant rules may identify a category before the learned detail.
+    if not result.get("subcategory_id") and result.get("category_id"):
+        learned = ClassificationAgent.predict(session, payload)
+        if (learned and learned.get("category_id") == result["category_id"]
+                and learned.get("subcategory_id")
+                and learned.get("classification") == result.get("classification")):
+            result.update(subcategory_id=learned["subcategory_id"], subcategory_name=learned["subcategory_name"])
+            if result.pop("needs_review", False):
+                result["note"] = "Matched a reviewed merchant detail within the determined category"
+    # Confirmed employers get a wage detail after preserving any reviewed custom income detail.
+    if (result.get("source") == "confirmed_employer_wage" and result.get("category_id")
+            and not result.get("subcategory_id")):
+        detail = ensure_subcategory(session, result["category_id"], "Wages")
+        result.update(subcategory_id=detail.id, subcategory_name=detail.name)
+    return result
+
+
+def _classify_payload(session, payload: dict) -> dict:
     description = payload.get("description") or ""
     payee = payload.get("payee") or ""
     notes = payload.get("notes") or ""
@@ -1290,12 +1458,23 @@ def classify_payload(session, payload: dict) -> dict:
     cleaned_merchant = clean_merchant(raw_merchant)
     combined = " ".join([cleaned_merchant, payee, description, notes]).strip()
     combined_lower = combined.lower()
+    # Credit-line drawdowns move borrowed funds; they are never earned income.
+    if re.search(r"\b(?:tfr|transfer)\s+from\s+(?:lc|line\s+of\s+credit)\b", combined_lower):
+        return _transfer_result(
+            session,
+            cleaned_merchant or payee or description,
+            "credit_line_drawdown",
+            note="Transfer from a line of credit; excluded from budget income",
+        )
     normalized = normalize_merchant(raw_merchant)
     person_like = _looks_like_person(cleaned_merchant or payee or description)
 
     bank_category_name = _format_bank_category(
         bank_category or pfc_detailed or pfc_primary
     )
+    # A bank's fee hint can describe only an embedded fee within a whole purchase.
+    if BankFeeMatcher.has_fee_metadata(bank_category or pfc_detailed or pfc_primary) and BankFeeMatcher.is_purchase_or_withdrawal(description):
+        bank_category_name = ""
     mcc_category = _mcc_to_category(mcc)
     transfer_text = _transaction_text(payee, description, notes)
     transfer_lower = transfer_text.lower()
@@ -1305,7 +1484,7 @@ def classify_payload(session, payload: dict) -> dict:
     account_mention = _find_account_mention(session, payload.get("account_id"), transfer_text)
     same_currency_transfer_account = _find_opposite_transfer_account(session, payload)
     same_currency_match = same_currency_transfer_account.name if same_currency_transfer_account else None
-    cross_currency_match = _find_cross_currency_transfer(session, payload)
+    cross_currency_match = None if same_currency_match else _find_cross_currency_transfer(session, payload)
     bank_transfer_hint = bool(bank_category_name and "transfer" in bank_category_name.lower())
     mcc_transfer_hint = bool(mcc_category and "transfer" in mcc_category.lower())
 
@@ -1362,6 +1541,8 @@ def classify_payload(session, payload: dict) -> dict:
     ambiguous_transfer_like = not internal_transfer_result and bool(
         bank_transfer_hint or mcc_transfer_hint or rail_keyword_hit or p2p_hit
     )
+    if PayPalActivity.identified_merchant(payee, description):
+        ambiguous_transfer_like = False
 
     known_support_counterparty = False
     try:
@@ -1378,6 +1559,12 @@ def classify_payload(session, payload: dict) -> dict:
             "wise_validated_support_payment",
             note="Known support counterparty with Wise-linked validation",
         )
+
+    # A confirmed amount-specific purchase must not become a merchant-wide food/tobacco rule.
+    if not current_account_is_business and CarltonTobaccoRule.matches_purchase(payload):
+        result = CarltonTobaccoRule.result(session, _ensure_category(session, LIFESTYLE_CATEGORY_NAME), cleaned_merchant)
+        result.update(source="carlton_aud22_tobacco", note="User confirmed Carlton Fresh native A$22 is cigarettes; other amounts retain their food classification")
+        return result
 
     merchant_override = _merchant_override_result(
         session,
@@ -1396,10 +1583,16 @@ def classify_payload(session, payload: dict) -> dict:
     if internal_transfer_result:
         return internal_transfer_result
 
-    rule_category = _find_rule_category(
-        session,
-        {"description": description, "payee": payee, "notes": notes, "merchant": cleaned_merchant},
-    )
+    # Conflicting or broken explicit rules must be reviewed, not silently picked.
+    rule_payload = {"description": description, "payee": payee, "notes": notes, "merchant": cleaned_merchant}
+    matched_rules = [rule for rule in session.scalars(select(Rule).where(Rule.is_active == 1)).all()
+                     if _rule_matches(rule, rule_payload)]
+    categories = {rule.category_id for rule in matched_rules}
+    rule_category = next(iter(categories)) if len(categories) == 1 else None
+    rule_target = session.get(Category, rule_category) if rule_category else None
+    if matched_rules and (len(categories) != 1 or not rule_target or not rule_target.is_active):
+        return {"category_id": None, "classification": "Personal", "source": "rule_conflict",
+                "needs_review": True, "note": "Conflicting rules or missing/inactive rule category"}
     if rule_category:
         category_name = _category_name(session, rule_category)
         result = {
@@ -1419,6 +1612,32 @@ def classify_payload(session, payload: dict) -> dict:
             result["flow_type"] = "external_p2p"
         return result
 
+    # The confirmed hotel descriptor keeps both charges and refunds in lodging.
+    if not current_account_is_business and YHALodgingRule.matches_merchant(payee, description):
+        hotel = YHALodgingRule.result(session, payload, _ensure_category(session, YHALodgingRule.category_name))
+        if hotel:
+            return hotel
+
+    # A reviewed Debt rule above is evidence for generic bank references; the rail alone is not.
+    if not current_account_is_business and PayPalActivity.credit_payment(payee, description, pfc_detailed or bank_category):
+        result = _debt_payment_result(session, cleaned_merchant or payee or description,
+                                     "paypal_credit_payment", "Explicit PayPal credit/installment repayment")
+        detail = ensure_subcategory(session, result["category_id"], "PayPal")
+        result.update(subcategory_id=detail.id, subcategory_name=detail.name)
+        return result
+    if not current_account_is_business and PayPalActivity.generic_reference(payee, description):
+        return PayPalActivity.review_result()
+
+    # University receipts have confirmed mixed wages/loan purposes; amount cannot decide.
+    if not current_account_is_business and UniversityFundingRule.matches(payload):
+        return UniversityFundingRule.review_result()
+
+    # The user identified generic Grab orders as food, while explicit rides remain transit.
+    if not current_account_is_business:
+        grab = GrabSpendingRule.result(session, payload)
+        if grab:
+            return grab
+
     positive_inflow_override = _positive_inflow_override(
         session,
         payload.get("account_id"),
@@ -1430,6 +1649,12 @@ def classify_payload(session, payload: dict) -> dict:
     )
     if positive_inflow_override:
         return positive_inflow_override
+
+    # Bank fee metadata can label whole purchases incorrectly; the matcher rejects those.
+    if not current_account_is_business and BankFeeMatcher.matches(
+        description, payee, bank_category or pfc_detailed or pfc_primary,
+    ):
+        return _bank_fee_result(session, cleaned_merchant or payee or description)
 
     account_type = _account_type(session, payload.get("account_id"))
     cash_atm_hit = None
@@ -1494,6 +1719,32 @@ def classify_payload(session, payload: dict) -> dict:
             "debt_payment_keyword",
             note=f"Matched debt payment keyword: {debt_payment_hit}",
         )
+
+    # YHA has a confirmed amount rule that precedes generic cafe text or profiles.
+    if not current_account_is_business and not ambiguous_transfer_like and YHASpendingRule.matches_merchant(payee, description):
+        yha = YHASpendingRule.result(session, payload, _ensure_category(session, "Food"))
+        if yha:
+            return yha
+
+    # Reviewed training examples precede generic merchant and bank guesses.
+    if not current_account_is_business and not ambiguous_transfer_like:
+        learned = ClassificationAgent.predict(session, payload)
+        if learned is not None:
+            return learned
+
+    # Confirmed merchant groups win over generic profiles after special flows.
+    if (
+        not current_account_is_business
+        and not ambiguous_transfer_like
+        and bank_category_name not in {
+            INCOME_CATEGORY_NAME, BUSINESS_CATEGORY_NAME, TRANSFER_CATEGORY_NAME,
+            FRIENDS_CATEGORY_NAME, DEBT_CATEGORY_NAME, SAVINGS_CATEGORY_NAME, CASH_ATM_CATEGORY_NAME,
+        }
+    ):
+        for rule in MERCHANT_SPENDING_RULES:
+            if rule.matches(amount, payee, description):
+                category_id = _ensure_category(session, rule.category_name)
+                return rule.result(session, category_id, cleaned_merchant or payee or description)
 
     mixed_positive_inflow = False
     try:
@@ -1593,6 +1844,10 @@ def classify_payload(session, payload: dict) -> dict:
                 note=f"Matched income keyword: {income_hit}",
             )
 
+    # The payment rail alone cannot establish a person, purchase purpose, or loan.
+    if PayPalActivity.present(payee, description):
+        return PayPalActivity.review_result()
+
     memory_rows = [] if ambiguous_transfer_like or mixed_positive_inflow else _search_memory(session, combined)
     if memory_rows:
         category_counts = Counter(row["category_id"] for row in memory_rows if row["category_id"])
@@ -1658,7 +1913,7 @@ def classify_payload(session, payload: dict) -> dict:
             "Do not classify as Transfers merely because the bank label, MCC, or description mentions transfer, Wise, wire, remit, PayID, BPAY, or FX.\n"
             "A payment sent over bank rails to a landlord, lender, utility, merchant, contractor, or vendor should be classified by purpose instead.\n"
             "Person-like names are not automatically Friends & Family; they can represent housing, payroll, contractors, loans, or other obligations.\n"
-            "Positive inflows should not default to expense categories like Food, Lifestyle, Health, Debt, Savings, Transport, or Housing & Bills unless there is strong evidence of a refund or reversal.\n"
+            f"Positive inflows should not default to expense categories like Food, Lifestyle, Health, Debt, Savings, {TRANSPORT_CATEGORY_NAME}, or Housing & Bills unless there is strong evidence of a refund or reversal.\n"
             "Positive inflows can represent wages, business income, family help, reimbursements, investment proceeds, or loan disbursements.\n"
             "Use 'Income' for wages, business inflows, dividends, distributions, fund payouts, or sale proceeds, not for savings transfers, round-ups, or contributions.\n"
             "Return JSON: {\"category\":\"<name>\",\"classification\":\"Personal|Business\",\"merchant_name\":\"<merchant>\",\"note\":\"<why>\"}\n"
@@ -1772,6 +2027,14 @@ def apply_classification(session, transaction_id: int, result: dict) -> dict:
             existing_split.category_id = category_id
             existing_split.subcategory_id = subcategory_id
             existing_split.classification = classification
+    elif result.get("clear_category"):
+        # Only an explicit review result may clear a previously guessed full split.
+        existing = session.scalars(select(TransactionSplit).where(
+            TransactionSplit.transaction_id == transaction_id)).all()
+        if len(existing) == 1 and abs(existing[0].amount - txn.amount) < 0.005:
+            existing[0].category_id = None
+            existing[0].subcategory_id = None
+            existing[0].classification = classification
 
     txn.classification = classification
     if category_id and txn.reconciliation_state in ("pending", "imported"):
@@ -1826,6 +2089,7 @@ def apply_classification(session, transaction_id: int, result: dict) -> dict:
     )
     session.add(audit)
     session.flush()
+    ClassificationAgent.learn(session, txn, result)
     if category_id and not skip_memory:
         try:
             session.execute(

@@ -4,7 +4,7 @@
   --bg: #eef4ff;
   --bg-accent: #d8e6ff;
   --ink: #0b1222;
-  --muted: #4f6b8d;
+  --muted: #4b6078;
   --accent: #00b3ff;
   --accent-deep: #0066ff;
   --accent-soft: rgba(0, 179, 255, 0.14);
@@ -488,7 +488,7 @@ h1, h2, h3 {
   line-height: 1.45;
 }
 
-.workspace-shell > .page > .section-header {
+.workspace-shell:not(.workspace-shell--home) > .page > .section-header {
   display: none;
 }
 
@@ -1452,6 +1452,86 @@ h1, h2, h3 {
   background: rgba(254, 226, 226, 0.45);
 }
 
+.budget-month-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.budget-year-picker,
+.budget-month-slider__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.budget-month-navigation button {
+  padding: 0.2rem 0.65rem;
+  box-shadow: none;
+  font-size: 1.1rem;
+}
+
+.budget-year-picker input {
+  width: 5.3rem;
+  min-width: 0;
+  padding: 0.35rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.budget-month-slider {
+  flex: 1 1 290px;
+  max-width: 720px;
+}
+
+.budget-month-slider__heading strong {
+  font-size: 0.85rem;
+}
+
+.budget-month-slider input[type="range"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0.45rem 0 0.25rem;
+  accent-color: #167c72;
+  cursor: ew-resize;
+}
+
+.budget-month-navigation__note {
+  font-size: 0.72rem;
+}
+
+.matrix-table-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+}
+
+.budget-matrix-help {
+  margin: 0.65rem 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.budget-matrix-help summary { cursor: pointer; }
+
+.matrix-table-actions button {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.72rem;
+  box-shadow: none;
+}
+
 .matrix-scroll {
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -1506,6 +1586,40 @@ h1, h2, h3 {
 .matrix-chart-copy {
   display: grid;
   gap: 0.55rem;
+}
+
+.matrix-chart-copy > p {
+  margin: 0;
+}
+
+/* Keep native balance review and spending details compact within the cash card. */
+.budget-cash-details {
+  font-size: 0.82rem;
+}
+
+.budget-cash-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.budget-cash-account-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.65rem;
+}
+
+.budget-cash-account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 0.7rem;
+}
+
+.budget-cash-account > :nth-child(2n) {
+  text-align: right;
+}
+
+.budget-cash-account-coverage {
+  grid-column: 1 / -1;
 }
 
 .matrix-chart-legend {
@@ -1567,11 +1681,22 @@ h1, h2, h3 {
 }
 
 .matrix-table {
-  min-width: 980px;
-  width: max-content;
+  min-width: 860px;
+  width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.84rem;
+}
+
+.matrix-table col.matrix-label-column { width: 180px; }
+.matrix-table col.matrix-annual-column { width: 190px; }
+
+.matrix-annual-heading span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 500;
 }
 
 .matrix-table th,
@@ -1588,11 +1713,93 @@ h1, h2, h3 {
   z-index: 3;
   background: rgba(248, 250, 252, 0.98);
   white-space: nowrap;
+  text-align: right;
 }
 
 .matrix-table th:first-child {
   left: 0;
   z-index: 4;
+  text-align: left;
+}
+
+.matrix-table th:last-child {
+  text-align: center;
+}
+
+.matrix-month-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.32rem;
+}
+
+.budget-month-battery {
+  --battery-color: #167c72;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  line-height: 1.1;
+}
+
+.budget-month-battery--empty,
+.budget-month-battery--unavailable {
+  --battery-color: #718096;
+}
+
+.budget-month-battery--deficit {
+  --battery-color: #b42318;
+}
+
+.budget-month-battery__amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.18rem;
+  color: var(--ink);
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.budget-month-battery--deficit .budget-month-battery__amount {
+  color: var(--battery-color);
+}
+
+.budget-month-battery__estimate {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 500;
+}
+
+.budget-month-battery__case {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 12px;
+  margin-right: 3px;
+  padding: 2px;
+  border: 1px solid var(--battery-color);
+  border-radius: 3px;
+}
+
+.budget-month-battery__case::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 3px;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 1px 1px 0;
+  background: var(--battery-color);
+}
+
+.budget-month-battery__fill {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--battery-color);
 }
 
 .matrix-cell {
@@ -1638,8 +1845,11 @@ h1, h2, h3 {
 
 .matrix-label-main {
   display: flex;
+  /* Keep bucket names and controls inside the sticky label column. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
+  overflow-wrap: anywhere;
 }
 
 .matrix-inline-subcategory-editor {
@@ -1754,17 +1964,6 @@ h1, h2, h3 {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   background: rgba(248, 250, 252, 0.92) !important;
-}
-
-.matrix-action-cell {
-  min-width: 70px;
-  text-align: center;
-  background: rgba(248, 250, 252, 0.92) !important;
-}
-
-.matrix-action-cell button {
-  padding: 0.25rem 0.45rem;
-  font-size: 0.76rem;
 }
 
 .matrix-drilldown-backdrop {
@@ -2347,9 +2546,88 @@ tbody tr:hover {
   to { opacity: 1; }
 }
 
+/* Visible monthly values share a signed scale with their average. */
+.budget-totals-chart {
+  display: grid;
+  width: 170px;
+  max-width: 100%;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.budget-totals-chart svg { display: block; width: 100%; height: 44px; }
+.budget-totals-chart__line { fill: none; stroke: #16857b; stroke-width: 2; }
+.budget-totals-chart__average { stroke: #397cd0; stroke-width: 1; stroke-dasharray: 3 3; }
+.budget-totals-chart__point { fill: #16857b; }
+.budget-totals-chart strong { color: var(--ink); }
+
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Keep unaccepted budget recommendations distinct from entered plan values. */
+.budget-spending-suggestion {
+  display: grid;
+  gap: 0.15rem;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0.25rem 0 0 auto;
+  padding: 0.16rem 0.3rem;
+  border: 1px solid rgba(22, 124, 114, 0.2);
+  border-radius: 6px;
+  background: rgba(22, 124, 114, 0.055);
+  color: #126b62;
+  box-shadow: none;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.budget-spending-suggestion__caption {
+  display: block;
+  margin-bottom: 0.08rem;
+  font-size: 0.52rem;
+  font-weight: 500;
+}
+
+.budget-month-suggestion-control {
+  max-width: 100%;
+  padding: 0.15rem 0.25rem;
+  border: 1px solid rgba(22, 124, 114, 0.2);
+  border-radius: 6px;
+  background: rgba(22, 124, 114, 0.055);
+  color: #126b62;
+  box-shadow: none;
+  font-size: 0.59rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.budget-spending-suggestion:hover,
+.budget-month-suggestion-control:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(22, 124, 114, 0.12);
+}
+
+/* Month messages must stay inside narrow table columns. */
+.budget-month-suggestion-status {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 @keyframes cardIn {
@@ -2416,3 +2694,321 @@ tbody tr:hover {
     flex-direction: column;
   }
 }
+
+/* Keep native loan observations separate from checking-derived estimates. */
+.debt-tracking-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 1rem;
+}
+
+.debt-tracking-card {
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  min-width: 0;
+}
+
+.debt-tracking-card__heading,
+.debt-profile-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.debt-tracking-card h3 {
+  margin: 0 0 0.3rem;
+}
+
+.debt-tracking-card__heading .muted,
+.debt-credit-limit,
+.debt-estimate-basis {
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.debt-balance-status {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.debt-balance-status.is-confirmed {
+  background: rgba(22, 124, 114, 0.1);
+  color: #116a62;
+}
+
+.debt-balance-status.is-estimated {
+  background: rgba(143, 101, 25, 0.09);
+  color: #765616;
+}
+
+.debt-observed-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1rem;
+}
+
+.debt-observed-balance > span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.debt-observed-balance > strong {
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.debt-credit-limit {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+}
+
+.debt-estimate-breakdown {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.8rem;
+  margin: 0.8rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.debt-estimate-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.debt-estimate-breakdown dt {
+  color: var(--muted);
+}
+
+.debt-estimate-breakdown dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.debt-source-activity {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.debt-source-activity summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.debt-activity-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.debt-activity-scroll,
+.debt-table-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.debt-activity-scroll {
+  max-height: 18rem;
+}
+
+.debt-activity-scroll td:first-child,
+.debt-activity-scroll td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.debt-activity-status {
+  text-transform: capitalize;
+}
+
+.debt-activity-status--pending {
+  color: #765616;
+}
+
+.debt-activity-status--returned {
+  color: #a1372b;
+}
+
+.debt-profile-editor {
+  padding: 1rem 0;
+}
+
+.debt-profile-fields,
+.debt-tracking-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.8rem;
+}
+
+.debt-profile-fields label,
+.debt-tracking-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.debt-profile-fields input,
+.debt-profile-fields select,
+.debt-tracking-fields input,
+.debt-tracking-fields select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.debt-tracking-fields {
+  margin: 1rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.debt-tracking-fields legend {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.debt-tracking-fields legend .muted {
+  font-weight: 400;
+  font-size: 0.72rem;
+}
+
+.debt-tracking-fields p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.debt-estimate-consent {
+  font-size: 0.82rem;
+  margin: 0.8rem 0;
+}
+
+.debt-estimate-consent input[type="checkbox"] {
+  width: auto;
+  min-width: 0;
+}
+
+/* Keep the optional saving pace legible and separate from entered monthly amounts. */
+.budget-target-pace {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.45rem;
+  padding: 0.4rem;
+  border-left: 2px solid #16857b;
+  background: rgba(22, 133, 123, 0.06);
+  color: #244b48;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  text-align: left;
+}
+.budget-target-pace__caption { color: var(--muted); }
+.budget-target-pace details { white-space: normal; }
+.budget-target-pace summary { cursor: pointer; color: var(--muted); }
+.budget-target-pace p { margin: 0.35rem 0 0; }
+
+/* Keep future commitments visible before navigating the month table. */
+.budget-future-costs {
+  margin: 0.8rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(22, 133, 123, 0.05);
+  font-size: 0.8rem;
+}
+.budget-future-costs p { margin: 0.4rem 0; }
+.budget-future-costs summary { cursor: pointer; }
+.budget-future-costs ul { margin: 0.3rem 0 0.6rem; }
+
+/* Keep the month step buttons beside the range they control. */
+.budget-month-slider__controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+}
+.budget-month-slider__controls button { min-width: 2rem; }
+.budget-spending-suggestion__basis { font-size: 0.6rem; color: var(--muted); }
+.budget-plan-adjustment { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; margin: 0.65rem 0; }
+.budget-coverage-scroll { overflow-x: auto; margin: 0.7rem 0; }
+.budget-coverage-table { width: 100%; border-collapse: collapse; text-align: left; font-variant-numeric: tabular-nums; }
+.budget-coverage-table caption { text-align: left; color: var(--muted); padding-bottom: 0.4rem; }
+.budget-coverage-table th, .budget-coverage-table td { padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--border); }
+.budget-coverage-table th span { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 500; }
+.budget-coverage-short { color: #9b2929; }
+.budget-target-pace summary { cursor: pointer; }
+
+.budget-spending-suggestion strong,
+.budget-spending-suggestion__basis { display: block; }
+
+/* Keep the amount and calendar together in the original editable pill. */
+/* Grow the focused pill over adjacent cells without moving the table columns. */
+.budget-cell-field { position: relative; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; background: #fff; overflow: hidden; }
+.budget-cell-field:focus-within {
+  z-index: 5; width: max(100%, calc(var(--cell-expanded-width) + var(--cell-control-width, 38px)));
+  margin-left: min(0px, calc(100% - var(--cell-expanded-width) - var(--cell-control-width, 38px)));
+  outline: 2px solid var(--muted); outline-offset: 1px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.15);
+}
+/* Retain numeric validation without spinner controls crowding the amount. */
+.matrix-cell .budget-cell-field input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.matrix-cell .budget-cell-field input::-webkit-inner-spin-button,
+.matrix-cell .budget-cell-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.matrix-cell .budget-cell-field input { flex: 1; width: 0; min-width: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.matrix-cell .budget-cell-field input:focus { outline: none; box-shadow: none; }
+.budget-cell-date { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; margin: 0 3px 0 0; padding: 4px; border: 0; border-radius: 50%; background: #eef0f3; color: var(--muted); box-shadow: none; }
+.budget-cell-date svg { width: 18px; height: 18px; }
+.budget-cell-date[data-has-date="true"] { background: #dcebe9; color: #17675f; }
+.budget-cell-date:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.budget-cell-dialog { width: min(440px, calc(100vw - 2rem)); padding: 1.4rem; border: 1px solid var(--border); border-radius: 14px; background: #f8fafc; color: var(--ink); box-shadow: var(--shadow); }
+.budget-cell-dialog::backdrop { background: rgba(11, 18, 34, 0.35); }
+.budget-cell-dialog label { display: grid; gap: 0.4rem; margin-top: 1rem; }
+.budget-cell-dialog p { font-size: 0.8rem; }
+.budget-cell-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+/* Collapse navigation without unmounting the active page or its unsaved drafts. */
+.sidebar-toggle { display: block; margin: 0 0 0.8rem auto; padding: 0.25rem 0.65rem; }
+.nav-workspace-short { display: none; }
+.app--sidebar-collapsed { grid-template-columns: 72px minmax(0, 1fr); }
+.app--sidebar-collapsed .sidebar { padding: 1rem 0.5rem; }
+.app--sidebar-collapsed .brand { display: none; }
+.app--sidebar-collapsed .nav-workspace { padding: 0.7rem; text-align: center; }
+.app--sidebar-collapsed .nav-workspace-label,
+.app--sidebar-collapsed .nav-workspace-meta { display: none; }
+.app--sidebar-collapsed .nav-workspace-short { display: block; }
+.matrix-table .budget-totals-chart svg { max-height: 28px; }
+.matrix-table td { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+@media (max-width: 900px) {
+  .app--sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .app--sidebar-collapsed .sidebar { position: relative; padding: 0.4rem 0.8rem; }
+  .app--sidebar-collapsed .sidebar-toggle { margin: 0; }
+  .app--sidebar-collapsed .nav { display: none; }
+}
+
+/* Explicit future-cost markers remain visible without adding another row label. */
+.budget-cell-field[data-future-cost="true"] { border-color: #16857b; background: #e8f5f2; }
+
+/* Reveal the optional marker only while the pill is being edited. */
+.budget-cell-mark {
+  display: none; place-items: center; flex: 0 0 24px; width: 24px; height: 26px;
+  padding: 3px; margin: 0 3px 0 0; border: 0; border-radius: 50%;
+  background: transparent; color: #8c9cac; box-shadow: none;
+}
+.budget-cell-field:focus-within .budget-cell-mark { display: grid; }
+.budget-cell-mark svg { width: 18px; height: 18px; }
+.budget-cell-mark[aria-pressed="true"] { color: #16857b; }
+.budget-cell-mark:hover { background: rgba(22, 133, 123, 0.08); color: #16857b; }
+.budget-cell-mark:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.budget-cell-mark[aria-disabled="true"] { opacity: 0.4; }

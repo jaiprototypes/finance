@@ -43,6 +43,7 @@ import {
   weekStartLabel
 } from "../../shared/financeUi";
 import type { InvoicePreviewProfile, LlmSettings } from "../../shared/financeUi";
+import { ObservedAccountBalance } from "../../shared/ObservedAccountBalance";
 
 export function Accounts({
   onOpenRegister,
@@ -52,7 +53,7 @@ export function Accounts({
   onOpenReport: () => void;
 }) {
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [balances, setBalances] = useState<Record<number, number>>({});
+  const [balances, setBalances] = useState<Record<number, number | null>>({});
   const [form, setForm] = useState({
     name: "",
     type: "bank",
@@ -68,9 +69,9 @@ export function Accounts({
       getFeatureData<any>("/reports/net-worth")
     ]);
     setAccounts(accountsData);
-    const nextBalances: Record<number, number> = {};
+    const nextBalances: Record<number, number | null> = {};
     (netWorth.accounts || []).forEach((row: any) => {
-      nextBalances[row.account_id] = Number(row.display_balance ?? row.balance ?? 0);
+      nextBalances[row.account_id] = ObservedAccountBalance.native(row);
     });
     setBalances(nextBalances);
   };
@@ -179,7 +180,7 @@ export function Accounts({
                 <td>{account.type}</td>
                 <td>{account.detail_type || account.institution || account.note || "—"}</td>
                 <td>{account.currency}</td>
-                <td>{formatCurrency(balances[account.id] ?? 0, account.currency)}</td>
+                <td>{balances[account.id] == null ? "—" : formatCurrency(balances[account.id], account.currency)}</td>
                 <td>
                   <button className="button-ghost" onClick={() => onOpenRegister(account.id)}>
                     Open register

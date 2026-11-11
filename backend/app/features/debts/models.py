@@ -12,6 +12,11 @@ class DebtProfile(Base):
     min_payment = Column(Float, nullable=False)
     due_date = Column(String)
     compounding = Column(String, default="daily", nullable=False)
+    credit_limit = Column(Float)
+    tracking_account_id = Column(Integer, ForeignKey("account.id"))
+    tracking_reference = Column(String)
+    balance_anchor_amount = Column(Float)
+    balance_anchor_date = Column(String)
     created_at = Column(String, nullable=False)
 
 class DebtPaymentLink(Base):

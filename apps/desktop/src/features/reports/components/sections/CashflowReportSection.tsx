@@ -51,9 +51,13 @@ export function CashflowReportSection({ model }: { model: any }) {
                             <div>
                               <strong>Personal outflow:</strong> {formatCurrency(row.outflow, row.currency)}
                             </div>
+                            {Math.abs(Number(row.transfer_adjustment || 0)) >= 0.005 && <div>
+                              <strong>Transfer timing and currency difference:</strong> {formatCurrency(row.transfer_adjustment, row.currency)}
+                            </div>}
                             <div>
                               <strong>Personal net:</strong> {formatCurrency(row.net, row.currency)}
                             </div>
+                            <p className="muted">Transfers between included personal cash accounts are excluded from inflow and outflow.</p>
                             {(Number(row.business_inflow || 0) !== 0 || Number(row.business_outflow || 0) !== 0) && (
                               <>
                                 <div>

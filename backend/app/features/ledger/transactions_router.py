@@ -11,8 +11,8 @@ from ...core.classification_port import apply_classification, clean_merchant, no
 from ...core.events import emit_ledger_changed
 from ...core.ledger_filters import is_legacy_opening
 from ...db import get_session
-from ..debts.models import DebtPaymentLink
 from .models import Account, Attachment, Transaction, TransactionSplit, TransactionTag
+from .split_assignment import SplitAssignment
 from ..taxonomy.models import Subcategory
 from .schemas import TransactionCreate, TransactionOut, TransactionSplitCreate, TransactionSplitUpdate, ReconcileUpdate, MergeTransactionsRequest, TransactionUpdate
 from ..taxonomy.subcategories import ensure_subcategory, subcategory_name, validate_subcategory_for_category
@@ -47,7 +47,8 @@ def _purge_transaction(session: Session, txn: Transaction) -> None:
         text("DELETE FROM archived_invoice_payment_link WHERE transaction_id = :transaction_id"),
         {"transaction_id": txn.id},
     )
-    session.execute(DebtPaymentLink.__table__.delete().where(DebtPaymentLink.transaction_id == txn.id))
+    # Clean references without coupling the ledger to the debt feature's models.
+    session.execute(text("DELETE FROM debt_payment_link WHERE transaction_id = :id"), {"id": txn.id})
     session.delete(txn)
 
 
@@ -311,24 +312,29 @@ def add_split(transaction_id: int, payload: TransactionSplitCreate, session: Ses
     txn = session.execute(select(Transaction).where(Transaction.id == transaction_id)).scalar_one_or_none()
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    splits = session.scalars(
+        select(TransactionSplit).where(TransactionSplit.transaction_id == transaction_id)
+    ).all()
+    try:
+        split = SplitAssignment(txn, splits).reusable_split(payload.amount, payload.currency)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     subcategory = _resolve_subcategory(session, payload.category_id, payload.subcategory_id, payload.subcategory_name)
-    split = TransactionSplit(
-        transaction_id=transaction_id,
-        category_id=payload.category_id,
-        subcategory_id=subcategory.id if subcategory else None,
-        amount=payload.amount,
-        currency=payload.currency,
-        classification=payload.classification,
-        notes=payload.notes,
-        business_percent=payload.business_percent,
-    )
-    session.add(split)
+    if split is None:
+        split = TransactionSplit(transaction_id=transaction_id)
+        session.add(split)
+        splits.append(split)
+    # Reclassification updates an existing full split instead of duplicating cashflow.
+    split.category_id = payload.category_id
+    split.subcategory_id = subcategory.id if subcategory else None
+    split.amount = payload.amount
+    split.currency = payload.currency
+    split.classification = payload.classification
+    split.notes = payload.notes
+    split.business_percent = payload.business_percent
     session.flush()
     updated = 0
     if payload.category_id is not None:
-        splits = session.execute(
-            select(TransactionSplit).where(TransactionSplit.transaction_id == transaction_id)
-        ).scalars().all()
         total = sum(s.amount for s in splits)
         if len(splits) == 1 and abs(total - txn.amount) < 0.01:
             merchant_name = clean_merchant(txn.payee or txn.description)
@@ -553,9 +559,8 @@ def merge_transactions(payload: MergeTransactionsRequest, session: Session = Dep
         {"primary_id": primary.id, "duplicate_id": duplicate.id},
     )
     session.execute(
-        DebtPaymentLink.__table__.update()
-        .where(DebtPaymentLink.transaction_id == duplicate.id)
-        .values(transaction_id=primary.id)
+        text("UPDATE debt_payment_link SET transaction_id = :primary_id WHERE transaction_id = :duplicate_id"),
+        {"primary_id": primary.id, "duplicate_id": duplicate.id},
     )
     session.execute(
         text("UPDATE import_row SET transaction_id = :primary_id WHERE transaction_id = :duplicate_id"),

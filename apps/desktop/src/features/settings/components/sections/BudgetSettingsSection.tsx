@@ -5,7 +5,6 @@ export function BudgetSettingsSection({ model }: { model: any }) {
     setBaseCurrency,
     budgetSkipMerchants,
     setBudgetSkipMerchants,
-    merchants,
     save
   } = model;
 
@@ -28,7 +27,9 @@ export function BudgetSettingsSection({ model }: { model: any }) {
           Reports and budget actuals rebalance to this base using the latest trailing fortnight
           AUD/USD average.
         </p>
-        <p className="muted">Transactions classified as Transfers or Friends & Family are excluded from budget actuals.</p>
+        <p className="muted">
+          Transfers and business activity are excluded from budget actuals. Friends & Family shows money sent minus money received.
+        </p>
         <div className="row">
           <button onClick={save}>Save base currency</button>
         </div>

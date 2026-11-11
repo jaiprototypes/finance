@@ -94,6 +94,7 @@ export function useBudgetMatrixDrilldown({
       bucket_name: row.name,
       subcategory_name: nextSubcategory?.name || null,
       subcategory_id: nextSubcategory?.subcategory_id || null,
+      allocation_kind: nextSubcategory?.allocation_kind || null,
       unassigned: Boolean(nextSubcategory?.is_unassigned),
       actual_total: actual,
       transactions: [],
@@ -109,6 +110,8 @@ export function useBudgetMatrixDrilldown({
         query.set("subcategory_id", String(nextSubcategory.subcategory_id));
       } else if (nextSubcategory?.is_unassigned) {
         query.set("unassigned", "true");
+      } else if (nextSubcategory?.allocation_kind) {
+        query.set("allocation_kind", nextSubcategory.allocation_kind);
       }
       const data = await getFeatureData<any>(`/reports/budget-cell-transactions?${query.toString()}`);
       setMatrixDrilldown({
@@ -120,6 +123,7 @@ export function useBudgetMatrixDrilldown({
         bucket_type: row.type,
         subcategory_name: nextSubcategory?.name || null,
         subcategory_id: nextSubcategory?.subcategory_id || null,
+        allocation_kind: nextSubcategory?.allocation_kind || null,
         unassigned: Boolean(nextSubcategory?.is_unassigned),
         loading: false,
         error: null
@@ -135,6 +139,7 @@ export function useBudgetMatrixDrilldown({
         bucket_name: row.name,
         subcategory_name: nextSubcategory?.name || null,
         subcategory_id: nextSubcategory?.subcategory_id || null,
+        allocation_kind: nextSubcategory?.allocation_kind || null,
         unassigned: Boolean(nextSubcategory?.is_unassigned),
         actual_total: actual,
         transactions: [],

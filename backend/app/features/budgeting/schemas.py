@@ -1,6 +1,7 @@
+from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BudgetMonthCreate(BaseModel):
@@ -25,6 +26,17 @@ class BudgetBucketTargetCreate(BaseModel):
     budget_bucket: str
     amount: float
     rollover_amount: float = 0.0
+    due_date: Optional[str] = None
+    future_cost: bool = False
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value: Optional[str]) -> Optional[str]:
+        """Store only canonical calendar dates; the route checks the budget month."""
+        if value is not None and date.fromisoformat(value).isoformat() != value:
+            raise ValueError("Use a date in YYYY-MM-DD format")
+        return value
+
 
 class BudgetBucketTargetOut(BudgetBucketTargetCreate):
     id: int

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ObservedAccountBalance } from "../../../shared/ObservedAccountBalance";
 import {
   WorkspaceInsightCard,
   currentMonthLabel,
@@ -68,11 +69,12 @@ export function PlanningWorkspaceOverview({
       const spent = Number(row.expense?.[currentBudgetMonth] || 0);
       return hasBudget && spent - target > 0.005;
     }).length;
-  const balanceMap = new Map<number, number>();
+  const balanceMap = new Map<number, number | null>();
   (netWorth?.accounts || []).forEach((row: any) =>
-    balanceMap.set(row.account_id, Number(row.display_balance_base ?? row.balance_base ?? row.balance ?? 0))
+    balanceMap.set(row.account_id, ObservedAccountBalance.base(row))
   );
   const debtTotal = profiles.reduce((sum, profile) => sum + Math.abs(balanceMap.get(profile.account_id) || 0), 0);
+  const unknownDebts = profiles.filter((profile) => balanceMap.get(profile.account_id) == null).length;
   const minimumPaymentTotal = profiles.reduce((sum, profile) => sum + Number(profile.min_payment || 0), 0);
   const latestRate = [...rates].sort((left, right) => String(right.date || "").localeCompare(String(left.date || "")))[0];
   const latestRateValue = toNumber(latestRate?.aud_per_usd);
@@ -121,11 +123,11 @@ export function PlanningWorkspaceOverview({
           onSelect={onSelect}
         />
         <WorkspaceInsightCard
-          title="Debt load"
+          title={unknownDebts ? "Known debt balances" : "Debt load"}
           value={formatCurrency(debtTotal, planningCurrency)}
           meta={
             profiles.length > 0
-              ? `${formatCount(profiles.length)} tracked debts · minimums ${formatCurrency(
+              ? `${formatCount(profiles.length)} tracked debts${unknownDebts ? ` · ${unknownDebts} balances unavailable` : ""} · minimums ${formatCurrency(
                   minimumPaymentTotal,
                   planningCurrency
                 )}`

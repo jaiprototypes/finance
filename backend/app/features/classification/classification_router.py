@@ -3,6 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...db import get_session
+from .agent import ClassificationAgent
+from .rule_health import RuleHealthService
 from .models import MerchantProfile, ClassificationAudit
 from ..ledger.models import Transaction, TransactionSplit
 from .schemas import TransactionClassifyRequest, ClassificationResult, BulkClassifyRequest, MerchantProfileCreate, MerchantProfileOut, MerchantProfileUpdate
@@ -19,6 +21,26 @@ from .service import (
 from ..taxonomy.subcategories import validate_subcategory_for_category
 
 router = APIRouter(prefix="/classify", tags=["classification"])
+
+
+@router.get("/agent/status")
+def classification_agent_status(session: Session = Depends(get_session)):
+    """Inspect the local classifier's training state."""
+    return ClassificationAgent.status(session)
+
+
+@router.post("/agent/train")
+def train_classification_agent(session: Session = Depends(get_session)):
+    """Train from reviewed corrections without overwriting historical categories."""
+    report = ClassificationAgent.train(session)
+    session.commit()
+    return report
+
+
+@router.get("/agent/audit")
+def audit_classification_rules(session: Session = Depends(get_session)):
+    """Report broken rules and missing details without changing saved records."""
+    return RuleHealthService.scan(session)
 
 
 @router.post("/preview", response_model=ClassificationResult)

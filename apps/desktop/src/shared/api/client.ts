@@ -1,3 +1,5 @@
+import { FinanceDataRevision } from "../FinanceDataRevision";
+
 const DEFAULT_BASE = "http://127.0.0.1:8123";
 const API_VERSION_PREFIX = "/api/v1";
 const STABLE_ROOT_PATHS = new Set(["/health", "/diagnostics/status", "/diagnostics/export"]);
@@ -58,6 +60,7 @@ async function fetchWithRouteFallback(path: string, init?: RequestInit): Promise
     const response = await fetch(url, init);
     lastResponse = response;
     if (response.status !== 404) {
+      if (response.ok && init?.method && init.method !== "GET") FinanceDataRevision.record(path);
       return response;
     }
   }

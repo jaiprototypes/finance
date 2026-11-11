@@ -77,6 +77,7 @@ def budget_cell_transactions_report(
     bucket: str,
     subcategory_id: int | None = None,
     unassigned: bool = False,
+    allocation_kind: str | None = None,
     session: Session = Depends(get_session),
 ):
     _refresh_fx_if_needed(session)
@@ -87,6 +88,7 @@ def budget_cell_transactions_report(
             bucket_key=bucket,
             subcategory_id=subcategory_id,
             unassigned=unassigned,
+            allocation_kind=allocation_kind,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

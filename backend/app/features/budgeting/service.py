@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from ..fx.currency import convert_amount, normalize_currency_code
 from .reporting import (
-    BUDGET_CASH_TOLERANCE,
     budget_matrix,
     budget_matrix_snapshot,
     budget_status,
@@ -43,7 +42,6 @@ def rebase_budget_targets(
 
 __all__ = [
     "BUDGET_BUCKETS",
-    "BUDGET_CASH_TOLERANCE",
     "budget_bucket_key_for_category",
     "budget_matrix",
     "budget_matrix_snapshot",

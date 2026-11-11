@@ -27,6 +27,8 @@ class BudgetBucketTarget(Base):
     budget_month_id = Column(Integer, ForeignKey("budget_month.id"), nullable=False)
     budget_bucket = Column(String, nullable=False)
     amount = Column(Float, nullable=False)
+    due_date = Column(String, nullable=True)
+    future_cost = Column(Integer, default=0, nullable=False)
     rollover_amount = Column(Float, default=0, nullable=False)
 
 __all__ = ['BudgetMonth', 'BudgetCategoryTarget', 'BudgetBucketTarget']

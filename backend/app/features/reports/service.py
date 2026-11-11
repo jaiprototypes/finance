@@ -6,9 +6,12 @@ from sqlalchemy import text, select
 
 from ...core.currency import get_base_currency
 from ...core.ledger_filters import is_legacy_opening as _shared_is_legacy_opening
-from ..budgeting.reporting import BUDGET_CASH_TOLERANCE, budget_bucket_transactions, budget_matrix, budget_status
+from ..budgeting.reporting import budget_bucket_transactions, budget_matrix, budget_status
 from ..connectors.models import PlaidAccount, UpAccount
 from ..ledger.models import Account, Transaction, TransactionSplit
+from ..ledger.bank_activity import BankActivityPolicy
+from ..ledger.cash_transfers import CashTransferPolicy
+from ..ledger.payment_reversals import load_reversed_payment_ids
 from ..taxonomy.models import Category, Subcategory
 from ..timesheets.models import Project, TimeEntry
 from ..taxonomy.service import FRIENDS_CATEGORY_NAME
@@ -55,66 +58,9 @@ def _load_unbudgetable_transaction_ids(session) -> set[int]:
     return transfer_ids
 
 
-def _is_direct_debit_dishonour(description: str | None) -> bool:
-    return (description or "").strip().lower() == "direct debit dishonour"
-
-
 def _load_budget_reversal_transaction_ids(session) -> set[int]:
-    rows = session.execute(
-        select(
-            Transaction.id,
-            Transaction.account_id,
-            Transaction.date,
-            Transaction.amount,
-            Transaction.currency,
-            Transaction.description,
-        ).order_by(Transaction.date, Transaction.id)
-    ).all()
-    dishonours: list[dict[str, Any]] = []
-    charges: list[dict[str, Any]] = []
-    for txn_id, account_id, txn_date, amount, currency, description in rows:
-        try:
-            txn_amount = float(amount or 0.0)
-        except (TypeError, ValueError):
-            continue
-        row = {
-            "id": int(txn_id),
-            "account_id": int(account_id),
-            "date": date.fromisoformat(str(txn_date)),
-            "amount": txn_amount,
-            "currency": currency or "",
-            "description": description or "",
-        }
-        if _is_direct_debit_dishonour(description) and txn_amount > 0:
-            dishonours.append(row)
-        elif txn_amount < 0:
-            charges.append(row)
-    used_charge_ids: set[int] = set()
-    excluded_ids: set[int] = set()
-    for dishonour in dishonours:
-        matches = [
-            charge
-            for charge in charges
-            if charge["id"] not in used_charge_ids
-            and charge["account_id"] == dishonour["account_id"]
-            and charge["currency"] == dishonour["currency"]
-            and abs(charge["amount"] + dishonour["amount"]) < 0.005
-            and abs((charge["date"] - dishonour["date"]).days) <= 7
-        ]
-        if not matches:
-            continue
-        matches.sort(
-            key=lambda charge: (
-                abs((charge["date"] - dishonour["date"]).days),
-                0 if charge["date"] <= dishonour["date"] else 1,
-                charge["id"],
-            )
-        )
-        match = matches[0]
-        used_charge_ids.add(match["id"])
-        excluded_ids.add(dishonour["id"])
-        excluded_ids.add(match["id"])
-    return excluded_ids
+    """Use the shared matcher for confirmed unpaid-payment returns."""
+    return load_reversed_payment_ids(session)
 
 
 def _conversion_context(session) -> tuple[str, dict[str, Any]]:
@@ -130,9 +76,16 @@ def _load_converted_transactions(
     start_date: str | None = None,
     end_date: str | None = None,
     classification: str | None = None,
+    *,
+    cash_movements: bool = False,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
     base_currency, fx_summary = _conversion_context(session)
+    bank_activity = BankActivityPolicy(session)
     excluded_ids = _load_budget_reversal_transaction_ids(session)
+    excluded_ids |= bank_activity.pending_ids
+    if cash_movements:
+        # Available cash includes reservations and returns on their actual bank dates.
+        excluded_ids = set()
     query = select(Transaction)
     if start_date:
         query = query.where(Transaction.date >= start_date)
@@ -147,7 +100,10 @@ def _load_converted_transactions(
             continue
         if _is_legacy_opening(txn.description, txn.notes, txn.payee):
             continue
-        amount_base = _convert_value(float(txn.amount or 0.0), txn.currency, base_currency, fx_summary)
+        native_amount = float(txn.amount or 0.0)
+        if not cash_movements:
+            native_amount += bank_activity.cashbacks.get(txn.id, 0)
+        amount_base = _convert_value(native_amount, txn.currency, base_currency, fx_summary)
         results.append(
             {
                 "transaction_id": txn.id,
@@ -156,7 +112,7 @@ def _load_converted_transactions(
                 "month": str(txn.date)[:7],
                 "currency": base_currency,
                 "native_currency": txn.currency,
-                "native_amount": float(txn.amount or 0.0),
+                "native_amount": native_amount,
                 "amount": amount_base,
                 "classification": txn.classification,
                 "description": txn.description,
@@ -164,6 +120,13 @@ def _load_converted_transactions(
                 "notes": txn.notes,
             }
         )
+        if cash_movements:
+            # Embedded savings and cashback are separate movements, not extra purchases.
+            for kind, amount in (("round_up", bank_activity.roundups.get(txn.id, 0)),
+                                 ("cashback", bank_activity.cashbacks.get(txn.id, 0))):
+                if amount:
+                    results.append({**results[-1], "entry_kind": kind, "native_amount": amount,
+                                    "amount": _convert_value(amount, txn.currency, base_currency, fx_summary)})
     return base_currency, fx_summary, results
 
 
@@ -184,7 +147,9 @@ def _load_converted_splits(
     exclude_unbudgetable: bool = False,
 ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
     base_currency, fx_summary = _conversion_context(session)
+    bank_activity = BankActivityPolicy(session)
     excluded_ids = _load_budget_reversal_transaction_ids(session)
+    excluded_ids |= bank_activity.pending_ids
     if exclude_unbudgetable:
         excluded_ids |= _load_unbudgetable_transaction_ids(session)
     query = (
@@ -198,14 +163,16 @@ def _load_converted_splits(
     if end_date:
         query = query.where(Transaction.date <= end_date)
     rows = session.execute(query).all()
+    split_amounts = bank_activity.split_amounts([row[0] for row in rows])
     results: list[dict[str, Any]] = []
     for split, txn, category_name, subcategory_name in rows:
-        if exclude_unbudgetable and txn.id in excluded_ids:
+        if txn.id in excluded_ids:
             continue
         if _is_legacy_opening(txn.description, txn.notes, txn.payee):
             continue
         split_currency = split.currency or txn.currency or base_currency
-        amount_base = _convert_value(float(split.amount or 0.0), split_currency, base_currency, fx_summary)
+        native_amount = split_amounts[split.id]
+        amount_base = _convert_value(native_amount, split_currency, base_currency, fx_summary)
         results.append(
             {
                 "transaction_id": txn.id,
@@ -217,7 +184,7 @@ def _load_converted_splits(
                 "month": str(txn.date)[:7],
                 "currency": base_currency,
                 "native_currency": split_currency,
-                "native_amount": float(split.amount or 0.0),
+                "native_amount": native_amount,
                 "amount": amount_base,
             }
         )
@@ -225,8 +192,9 @@ def _load_converted_splits(
 
 
 def cashflow_by_month(session) -> list[dict]:
-    base_currency, _, rows = _load_converted_transactions(session)
+    base_currency, fx_summary, rows = _load_converted_transactions(session, cash_movements=True)
     account_map = _account_map_for_transaction_rows(session, rows)
+    transfers = CashTransferPolicy(session)
     monthly: dict[str, dict[str, float]] = {}
     for row in rows:
         month = row["month"] or "Unknown"
@@ -236,23 +204,32 @@ def cashflow_by_month(session) -> list[dict]:
                 "inflow": 0.0,
                 "outflow": 0.0,
                 "net": 0.0,
+                "transfer_adjustment": 0.0,
                 "business_inflow": 0.0,
                 "business_outflow": 0.0,
                 "business_net": 0.0,
+                "business_transfer_adjustment": 0.0,
                 "total_inflow": 0.0,
                 "total_outflow": 0.0,
                 "total_net": 0.0,
+                "total_transfer_adjustment": 0.0,
             },
         )
         amount = float(row["amount"] or 0.0)
+        excluded = transfers.excluded_amount(row["transaction_id"], row.get("entry_kind", "raw"))
+        adjustment = _convert_value(excluded, row["native_currency"], base_currency, fx_summary)
+        external = amount - adjustment
         account = account_map.get(int(row["account_id"])) if row.get("account_id") is not None else None
         prefix = "business_" if account_cash_role(account) == "business" else ""
-        if amount > 0:
-            entry[f"{prefix}inflow"] += amount
-            entry["total_inflow"] += amount
-        elif amount < 0:
-            entry[f"{prefix}outflow"] += -amount
-            entry["total_outflow"] += -amount
+        if external > 0:
+            entry[f"{prefix}inflow"] += external
+            entry["total_inflow"] += external
+        elif external < 0:
+            entry[f"{prefix}outflow"] += -external
+            entry["total_outflow"] += -external
+        # Preserve bank cash net when internal legs post in different periods or currencies.
+        entry[f"{prefix}transfer_adjustment"] += adjustment
+        entry["total_transfer_adjustment"] += adjustment
         entry[f"{prefix}net"] += amount
         entry["total_net"] += amount
     return [
@@ -262,12 +239,15 @@ def cashflow_by_month(session) -> list[dict]:
             "inflow": values["inflow"],
             "outflow": values["outflow"],
             "net": values["net"],
+            "transfer_adjustment": values["transfer_adjustment"],
             "business_inflow": values["business_inflow"],
             "business_outflow": values["business_outflow"],
             "business_net": values["business_net"],
+            "business_transfer_adjustment": values["business_transfer_adjustment"],
             "total_inflow": values["total_inflow"],
             "total_outflow": values["total_outflow"],
             "total_net": values["total_net"],
+            "total_transfer_adjustment": values["total_transfer_adjustment"],
         }
         for month, values in sorted(monthly.items())
     ]
@@ -371,6 +351,18 @@ def _provider_balance_map(session) -> dict[int, dict[str, Any]]:
         if not existing or (candidate["balance_as_of"] or "") > (existing.get("balance_as_of") or ""):
             provider_map[int(account_id)] = candidate
 
+    # A user-confirmed loan statement is an observation, never a checking-derived estimate.
+    for account_id, amount, anchor_date in session.execute(text(
+        "SELECT account_id, balance_anchor_amount, balance_anchor_date FROM debt_profile "
+        "WHERE balance_anchor_amount IS NOT NULL AND balance_anchor_date IS NOT NULL"
+    )).all():
+        if str(anchor_date) > datetime.now().strftime("%Y-%m-%d"):
+            continue
+        candidate = {"source": "confirmed_debt_balance", "current_balance": -float(amount),
+                     "available_balance": None, "balance_as_of": str(anchor_date)}
+        existing = provider_map.get(int(account_id))
+        if not existing or str(anchor_date) >= str(existing.get("balance_as_of") or "")[:10]:
+            provider_map[int(account_id)] = candidate
     return provider_map
 
 
@@ -415,9 +407,19 @@ def net_worth(session) -> dict:
     business_checking_as_of_values: list[str] = []
     all_checking_as_of_values: list[str] = []
     provider_map = _provider_balance_map(session)
+    cash_adjustments = dict(session.execute(text(
+        "SELECT account_id, COALESCE(SUM(round_up_amount + cashback_amount), 0) "
+        "FROM up_transaction GROUP BY account_id"
+    )).all())
+    tracked_accounts = set(session.scalars(text(
+        "SELECT account_id FROM debt_profile WHERE tracking_account_id IS NOT NULL"
+    )).all())
+    unknown_liability_count = 0
     for row in rows:
         tx_count = int(row.get("transaction_count") or 0)
-        ledger_native_balance = float(row["balance"] or 0.0)
+        raw_ledger_balance = float(row["balance"] or 0.0)
+        ledger_adjustment = float(cash_adjustments.get(row["account_id"], 0))
+        ledger_native_balance = raw_ledger_balance + ledger_adjustment
         provider = provider_map.get(int(row["account_id"]))
         provider_native_balance = None
         if provider:
@@ -429,12 +431,15 @@ def net_worth(session) -> dict:
         )
         if not int(row.get("is_active") or 0) and abs(effective_native_balance) < 0.005 and tx_count == 0:
             continue
-        if abs(effective_native_balance) < 0.005 and tx_count == 0 and provider_native_balance is None:
+        tracked_unknown = row["account_id"] in tracked_accounts and provider_native_balance is None
+        if abs(effective_native_balance) < 0.005 and tx_count == 0 and provider_native_balance is None and not tracked_unknown:
             continue
         native_currency = row["currency"] or base_currency
         ledger_balance_base = _convert_value(ledger_native_balance, native_currency, base_currency, fx_summary)
         balance_base = _convert_value(effective_native_balance, native_currency, base_currency, fx_summary)
         data = dict(row)
+        data["raw_ledger_balance"] = raw_ledger_balance
+        data["ledger_cash_adjustment"] = ledger_adjustment
         data["ledger_balance"] = ledger_native_balance
         data["ledger_balance_base"] = ledger_balance_base
         data["provider_current_balance"] = provider.get("current_balance") if provider else None
@@ -452,13 +457,23 @@ def net_worth(session) -> dict:
         included_in_total = included_in_cash_total and cash_role == "personal"
         data["included_in_total"] = included_in_total
         data["included_in_cash_total"] = included_in_cash_total
+        data["balance_known"] = not tracked_unknown
+        if tracked_unknown:
+            # An empty tracked liability has an unknown balance, not an observed zero.
+            data.update(display_balance=None, display_balance_base=None, balance_base=None,
+                        balance_source="unanchored_debt_tracking", included_in_total=False,
+                        included_in_cash_total=False)
+            accounts.append(data)
+            unknown_liability_count += 1
+            continue
         accounts.append(data)
-        total += ledger_balance_base
+        # Summary totals must use the same authoritative balances as account rows.
+        total += balance_base
         is_liability = account_type in {"credit card", "loan", "student loan"}
         if is_liability:
-            liability_total += abs(ledger_balance_base)
+            liability_total += abs(balance_base)
         else:
-            asset_total += ledger_balance_base
+            asset_total += balance_base
         if included_in_cash_total:
             all_checking_total += balance_base
             all_checking_account_count += 1
@@ -491,6 +506,8 @@ def net_worth(session) -> dict:
         "base_currency": base_currency,
         "asset_total": asset_total,
         "liability_total": liability_total,
+        "unknown_liability_count": unknown_liability_count,
+        "net_worth_complete": unknown_liability_count == 0,
         "checking_total": checking_total,
         "personal_checking_total": checking_total,
         "business_checking_total": business_checking_total,

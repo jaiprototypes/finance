@@ -66,8 +66,11 @@ class TransactionClassifyRequest(BaseModel):
 
 class ClassificationResult(BaseModel):
     category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    subcategory_name: Optional[str] = None
     category_name: Optional[str] = None
     classification: str = "Personal"
+    needs_review: bool = False
     merchant_name: Optional[str] = None
     source: str
     flow_type: Optional[str] = None

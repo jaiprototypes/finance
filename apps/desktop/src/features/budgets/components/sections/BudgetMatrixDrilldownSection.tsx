@@ -1,3 +1,11 @@
+/** Distinguish saving allocations from purchases, refunds and family transfers. */
+function transactionFlowLabel(txn: any, bucket: string): string {
+  const negative = Number(txn.effect_on_actual || 0) < 0;
+  if (txn.is_savings_transfer || txn.cash_neutral) return negative ? "Withdrawn from savings" : "Saved";
+  if (bucket === "friends_family") return negative ? "Received" : "Sent";
+  return negative ? "Credit/refund" : "Expense/income";
+}
+
 export function BudgetMatrixDrilldownSection({ model }: { model: any }) {
   const {
     applyMatrixDrilldownSubcategory,
@@ -45,7 +53,7 @@ export function BudgetMatrixDrilldownSection({ model }: { model: any }) {
         ) : (
           <div className="matrix-drilldown-list">
             {(matrixDrilldown.transactions || []).map((txn: any) => (
-              <div key={`drilldown-${txn.split_id || txn.transaction_id}`} className="matrix-drilldown-item">
+              <div key={`drilldown-${txn.entry_id || txn.split_id || txn.transaction_id}`} className="matrix-drilldown-item">
                 <div className="matrix-drilldown-item-top">
                   <strong>{txn.payee || txn.description || `Transaction ${txn.transaction_id}`}</strong>
                   <span
@@ -64,9 +72,15 @@ export function BudgetMatrixDrilldownSection({ model }: { model: any }) {
                 )}
                 <div className="muted">
                   {formatCurrency(txn.native_amount, txn.native_currency)} native
-                  {Number(txn.effect_on_actual || 0) < 0 ? " · Credit/refund" : " · Expense/income"}
+                  {" · "}{transactionFlowLabel(txn, matrixDrilldown.budget_bucket)}
                 </div>
-                {matrixDrilldownSubcategories.length > 0 && txn.split_id && (
+                {Number(txn.native_cashback || 0) > 0 && (
+                  <div className="muted">
+                    Purchase {formatCurrency(txn.native_gross_amount, txn.native_currency)}
+                    {" · Cashback "}{formatCurrency(txn.native_cashback, txn.native_currency)}
+                  </div>
+                )}
+                {!matrixDrilldown.read_only && !txn.read_only && matrixDrilldownSubcategories.length > 0 && txn.split_id && (
                   <div className="matrix-drilldown-subcategory-row">
                     <select
                       value={
